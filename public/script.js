@@ -11,7 +11,7 @@ const translations = {
         'input.hint': '雾萌AI生成内容仅供参考，请自行甄别其准确性。',
         'modal.title': '提示',
         'modal.ok': '确定',
-        'messages.thinking': 'AI正在思考中...',
+        'messages.thinking': '雾萌AI正在思考中...',
         'messages.error': '抱歉，AI服务暂时不可用，请稍后再试',
         'messages.networkError': '网络连接已断开，请检查您的网络设置',
         'messages.serverError': '无法连接到服务器，请确保服务器正在运行',
@@ -154,6 +154,8 @@ function toggleLanguage() {
 function startNewChat() {
     currentChatId = Date.now().toString();
     chatHistory = [];
+    // 清空DOM中的聊天消息
+    chatMessages.innerHTML = '';
     chatMessages.style.display = 'none';
     welcomeScreen.style.display = 'flex';
     updateChatList();
@@ -205,14 +207,21 @@ async function handleSubmit(e) {
             })
         });
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
         const data = await response.json();
         
         // 隐藏打字指示器
         hideTypingIndicator();
+        
+        // 特殊处理频率限制错误
+        if (response.status === 429 && data.rateLimitExceeded) {
+            // 像AI回复一样显示频率限制消息
+            addMessage(data.error, 'assistant');
+            return;
+        }
+        
+        if (!response.ok) {
+            throw new Error(data.error || `HTTP error! status: ${response.status}`);
+        }
         
         if (data.error) {
             throw new Error(data.error);
@@ -363,6 +372,8 @@ function showErrorModal(message) {
     errorMessage.innerHTML = message.replace(/\n/g, '<br>');
     errorModal.style.display = 'flex';
 }
+
+
 
 // 关闭错误模态框
 function closeErrorModal() {

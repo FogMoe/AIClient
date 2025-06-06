@@ -9,6 +9,33 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// 频率限制配置
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1分钟（毫秒）
+const RATE_LIMIT_MAX_REQUESTS = 5; // 每分钟最大请求数
+const sessionRequestTimes = new Map(); // 存储每个session的请求时间戳
+
+// 清理过期的请求记录
+function cleanupExpiredRequests(sessionId) {
+    const now = Date.now();
+    const requestTimes = sessionRequestTimes.get(sessionId) || [];
+    const validTimes = requestTimes.filter(time => (now - time) < RATE_LIMIT_WINDOW);
+    sessionRequestTimes.set(sessionId, validTimes);
+    return validTimes;
+}
+
+// 检查频率限制
+function checkRateLimit(sessionId) {
+    const validTimes = cleanupExpiredRequests(sessionId);
+    return validTimes.length < RATE_LIMIT_MAX_REQUESTS;
+}
+
+// 记录请求时间
+function recordRequest(sessionId) {
+    const validTimes = cleanupExpiredRequests(sessionId);
+    validTimes.push(Date.now());
+    sessionRequestTimes.set(sessionId, validTimes);
+}
+
 // 日志管理
 const logDir = 'logs';
 if (!fs.existsSync(logDir)) {
@@ -48,6 +75,25 @@ app.post('/api/chat', async (req, res) => {
         if (!message) {
             return res.status(400).json({ error: '消息不能为空' });
         }
+
+        // 检查频率限制
+        if (!checkRateLimit(sessionId)) {
+            const validTimes = cleanupExpiredRequests(sessionId);
+            const oldestRequestTime = Math.min(...validTimes);
+            const timeUntilReset = Math.ceil((RATE_LIMIT_WINDOW - (Date.now() - oldestRequestTime)) / 1000);
+            
+            console.log(`会话 ${sessionId} 触发频率限制，剩余等待时间: ${timeUntilReset}秒`);
+            
+            return res.status(429).json({ 
+                error: `您的对话过于频繁，请稍后再试。`,
+                rateLimitExceeded: true,
+                retryAfter: timeUntilReset,
+                timestamp: new Date().toISOString()
+            });
+        }
+
+        // 记录此次请求
+        recordRequest(sessionId);
 
         // 调试日志：显示接收到的消息信息
         console.log('接收到的消息:', message);
