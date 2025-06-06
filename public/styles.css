@@ -43,6 +43,14 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+}
+
+.logo:hover {
+    opacity: 0.8;
 }
 
 .logo-icon {
@@ -192,6 +200,8 @@ body {
     color: #666;
     font-weight: 300;
 }
+
+
 
 /* 聊天区域 */
 .chat-container {
@@ -443,6 +453,23 @@ body {
     color: #999;
     text-align: center;
     margin-top: 12px;
+}
+
+.development-status {
+    text-align: center;
+    font-size: 10px;
+    color: #aaa;
+    padding: 4px 8px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.development-status i {
+    font-size: 9px;
+    color: #bbb;
 }
 
 /* 模态框样式 */
