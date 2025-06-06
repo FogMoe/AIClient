@@ -1,21 +1,21 @@
 // 多语言支持
 const translations = {
     'zh-CN': {
-        'page.title': '雾萌AI',
-        'app.name': '雾萌',
+        'page.title': '雾萌娘',
+        'app.name': '雾萌娘',
         'sidebar.newChat': '新建对话',
         'sidebar.today': '今天',
         'welcome.greeting': '早上好',
-        'welcome.subtitle': '今天有什么可以帮你吗？',
-        'input.placeholder': '向 雾萌 发送消息',
-        'input.hint': '雾萌AI生成内容仅供参考，请自行甄别其准确性。',
+        'welcome.subtitle': '有什么我可以帮忙吗？',
+        'input.placeholder': '向 雾萌娘 发送消息',
+        'input.hint': 'AI生成内容仅供参考，请自行甄别其准确性。',
         'modal.title': '提示',
         'modal.ok': '确定',
-        'messages.thinking': '雾萌AI正在思考中...',
+        'messages.thinking': '雾萌娘正在思考中...',
         'messages.error': '抱歉，AI服务暂时不可用，请稍后再试',
         'messages.networkError': '网络连接已断开，请检查您的网络设置',
         'messages.serverError': '无法连接到服务器，请确保服务器正在运行',
-        'messages.welcome': '您好！我是雾萌AI助手，有什么可以帮助您的吗？',
+        'messages.welcome': '您好！我是雾萌娘，有什么可以帮助您的吗？',
         'time.justNow': '刚刚',
         'time.minutesAgo': '{0}分钟前',
         'time.hoursAgo': '{0}小时前'
