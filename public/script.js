@@ -63,6 +63,13 @@ const chatList = document.getElementById('chatList');
 let chatHistory = [];
 let currentChatId = null;
 
+// 会话唯一ID
+let sessionId = localStorage.getItem('sessionId');
+if (!sessionId) {
+    sessionId = 'sess-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem('sessionId', sessionId);
+}
+
 // 多语言函数
 function t(key, ...args) {
     let text = translations[currentLanguage][key] || key;
@@ -191,7 +198,8 @@ async function handleSubmit(e) {
             },
             body: JSON.stringify({ 
                 message,
-                history: conversationHistory
+                history: conversationHistory,
+                sessionId
             })
         });
         

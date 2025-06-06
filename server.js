@@ -3,9 +3,32 @@ const cors = require('cors');
 const path = require('path');
 const { AzureOpenAI } = require("openai");
 require('dotenv').config();
+const winston = require('winston');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// 日志管理
+const logDir = 'logs';
+if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir);
+}
+const logger = winston.createLogger({
+    level: 'info',
+    format: winston.format.combine(
+        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        winston.format.printf(info => `${info.timestamp} [${info.level.toUpperCase()}] ${info.message}`)
+    ),
+    transports: [
+        new winston.transports.File({ filename: logDir + '/server.log', maxsize: 1024 * 1024 * 5, maxFiles: 5 }),
+        new winston.transports.Console()
+    ]
+});
+
+// 替换console.log/console.error为logger
+console.log = (...args) => logger.info(args.join(' '));
+console.error = (...args) => logger.error(args.join(' '));
 
 // 中间件
 app.use(cors());
@@ -20,18 +43,16 @@ app.get('/', (req, res) => {
 // AI聊天API路由
 app.post('/api/chat', async (req, res) => {
     try {
-        const { message, history = [] } = req.body;
+        const { message, history = [], sessionId = 'unknown' } = req.body;
         
         if (!message) {
             return res.status(400).json({ error: '消息不能为空' });
         }
 
-        // 调试日志：显示接收到的对话历史
+        // 调试日志：显示接收到的消息信息
         console.log('接收到的消息:', message);
         console.log('对话历史长度:', history.length);
-        if (history.length > 0) {
-            console.log('最近3条历史:', history.slice(-3));
-        }
+        console.log('会话ID:', sessionId);
 
         // Azure OpenAI 配置
         const endpoint = process.env.AZURE_OPENAI_ENDPOINT || "<REPLACE_WITH_YOUR_ENDPOINT_VALUE_HERE>";
@@ -39,10 +60,30 @@ app.post('/api/chat', async (req, res) => {
         const apiVersion = process.env.AZURE_OPENAI_API_VERSION || "<REPLACE_WITH_YOUR_API_VERSION_VALUE_HERE>";
         const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || "<REPLACE_WITH_YOUR_DEPLOYMENT_VALUE_HERE>";
 
+        // 特殊处理ping请求，避免消耗API配额
+        if (message === 'ping') {
+            console.log('收到ping请求，返回连接正常响应');
+            return res.json({ 
+                response: 'pong',
+                timestamp: new Date().toISOString()
+            });
+        }
+
         // 如果没有配置API密钥，返回模拟响应
         if (!process.env.AZURE_OPENAI_API_KEY || apiKey === "<REPLACE_WITH_YOUR_KEY_VALUE_HERE>") {
             console.log('未配置Azure OpenAI API密钥，使用模拟响应');
             const simulatedResponse = generateSimulatedResponse(message, history);
+            
+            // 写入对话历史日志
+            if (sessionId !== 'unknown') {
+                const fullHistory = [...history, { role: "assistant", content: simulatedResponse }];
+                const historyLogPath = `${logDir}/history-${sessionId}.log`;
+                const historyLogEntry = `\n[${new Date().toISOString()}]\n${JSON.stringify(fullHistory, null, 2)}\n`;
+                fs.appendFile(historyLogPath, historyLogEntry, err => {
+                    if (err) logger.error('写入对话历史日志失败:', err);
+                });
+            }
+            
             return res.json({ 
                 response: simulatedResponse,
                 timestamp: new Date().toISOString()
@@ -58,11 +99,10 @@ app.post('/api/chat', async (req, res) => {
                 deployment 
             });
 
-            // 构建完整的对话消息数组
+            // 构建完整的对话消息数组（history已经包含当前用户消息）
             const messages = [
                 { role: "system", content: "你是雾萌AI助手，一个友好、有帮助的AI助手。请用简体中文回答用户的问题。" },
-                ...history, // 添加对话历史
-                { role: "user", content: message } // 添加当前用户消息
+                ...history // 对话历史已包含当前用户消息
             ];
 
             const result = await client.chat.completions.create({
@@ -72,6 +112,16 @@ app.post('/api/chat', async (req, res) => {
             });
 
             const aiResponse = result.choices[0].message.content;
+
+            // 写入对话历史日志
+            if (sessionId !== 'unknown') {
+                const fullHistory = [...history, { role: "assistant", content: aiResponse }];
+                const historyLogPath = `${logDir}/history-${sessionId}.log`;
+                const historyLogEntry = `\n[${new Date().toISOString()}]\n${JSON.stringify(fullHistory, null, 2)}\n`;
+                fs.appendFile(historyLogPath, historyLogEntry, err => {
+                    if (err) logger.error('写入对话历史日志失败:', err);
+                });
+            }
 
             res.json({ 
                 response: aiResponse,
@@ -83,8 +133,20 @@ app.post('/api/chat', async (req, res) => {
             
             // 如果Azure认证或API调用失败，回退到模拟响应
             const simulatedResponse = generateSimulatedResponse(message, history);
+            const fallbackResponse = simulatedResponse + '\n\n*注意：当前使用演示模式，因为Azure OpenAI服务不可用*';
+            
+            // 写入对话历史日志
+            if (sessionId !== 'unknown') {
+                const fullHistory = [...history, { role: "assistant", content: fallbackResponse }];
+                const historyLogPath = `${logDir}/history-${sessionId}.log`;
+                const historyLogEntry = `\n[${new Date().toISOString()}]\n${JSON.stringify(fullHistory, null, 2)}\n`;
+                fs.appendFile(historyLogPath, historyLogEntry, err => {
+                    if (err) logger.error('写入对话历史日志失败:', err);
+                });
+            }
+            
             res.json({ 
-                response: simulatedResponse + '\n\n*注意：当前使用演示模式，因为Azure OpenAI服务不可用*',
+                response: fallbackResponse,
                 timestamp: new Date().toISOString()
             });
         }
@@ -131,4 +193,4 @@ function generateSimulatedResponse(message, history = []) {
 app.listen(PORT, () => {
     console.log(`AI聊天服务器运行在 http://localhost:${PORT}`);
     console.log('按 Ctrl+C 停止服务器');
-}); 
+});
