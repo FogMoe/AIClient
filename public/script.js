@@ -45,6 +45,129 @@ const translations = {
 // 暂时锁定为简体中文
 let currentLanguage = 'zh-CN'; // localStorage.getItem('language') || 'zh-CN';
 
+// Markdown 配置
+if (typeof marked !== 'undefined') {
+    // 配置 marked
+    marked.setOptions({
+        highlight: function(code, language) {
+            if (typeof hljs !== 'undefined' && language && hljs.getLanguage(language)) {
+                try {
+                    return hljs.highlight(code, { language: language }).value;
+                } catch (err) {}
+            }
+            return code;
+        },
+        langPrefix: 'hljs language-',
+        breaks: true,
+        gfm: true
+    });
+}
+
+// 复制消息功能
+async function copyMessage(text, button) {
+    try {
+        // 使用现代的 Clipboard API
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            // 降级方案：使用传统的复制方法
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+        }
+        
+        // 显示复制成功的反馈
+        const originalIcon = button.innerHTML;
+        const originalTitle = button.title;
+        
+        button.innerHTML = '<i class="fas fa-check"></i>';
+        button.title = '已复制';
+        button.classList.add('copied');
+        
+        // 2秒后恢复原始状态
+        setTimeout(() => {
+            button.innerHTML = originalIcon;
+            button.title = originalTitle;
+            button.classList.remove('copied');
+        }, 2000);
+        
+    } catch (error) {
+        console.error('复制失败:', error);
+        
+        // 显示复制失败的反馈
+        const originalIcon = button.innerHTML;
+        const originalTitle = button.title;
+        
+        button.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+        button.title = '复制失败';
+        button.classList.add('copy-error');
+        
+        setTimeout(() => {
+            button.innerHTML = originalIcon;
+            button.title = originalTitle;
+            button.classList.remove('copy-error');
+        }, 2000);
+    }
+}
+
+// 安全的HTML清理函数
+function sanitizeHtml(html) {
+    // 创建一个临时div来清理HTML
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+    
+    // 移除危险的脚本标签
+    const scripts = temp.querySelectorAll('script');
+    scripts.forEach(script => script.remove());
+    
+    // 移除危险的事件属性
+    const elements = temp.querySelectorAll('*');
+    elements.forEach(el => {
+        // 移除所有以 on 开头的事件属性
+        Array.from(el.attributes).forEach(attr => {
+            if (attr.name.startsWith('on')) {
+                el.removeAttribute(attr.name);
+            }
+        });
+        
+        // 清理 href 属性，只允许 http/https/mailto 链接
+        if (el.hasAttribute('href')) {
+            const href = el.getAttribute('href');
+            if (!href.match(/^(https?:\/\/|mailto:)/i)) {
+                el.removeAttribute('href');
+            } else {
+                // 为外部链接添加安全属性
+                el.setAttribute('target', '_blank');
+                el.setAttribute('rel', 'noopener noreferrer');
+            }
+        }
+    });
+    
+    return temp.innerHTML;
+}
+
+// Markdown 渲染函数
+function renderMarkdown(text) {
+    if (typeof marked === 'undefined') {
+        return text.replace(/\n/g, '<br>');
+    }
+    
+    try {
+        const rendered = marked.parse(text);
+        return sanitizeHtml(rendered);
+    } catch (error) {
+        console.error('Markdown 解析错误:', error);
+        return text.replace(/\n/g, '<br>');
+    }
+}
+
 // DOM元素
 const messageForm = document.getElementById('messageForm');
 const messageInput = document.getElementById('messageInput');
@@ -285,7 +408,7 @@ function addMessage(text, type, timestamp = null) {
     
     const textDiv = document.createElement('div');
     textDiv.className = 'message-text';
-    textDiv.textContent = text;
+    textDiv.innerHTML = renderMarkdown(text);
     
     const timeDiv = document.createElement('div');
     timeDiv.className = 'message-time';
@@ -294,10 +417,29 @@ function addMessage(text, type, timestamp = null) {
     contentDiv.appendChild(textDiv);
     contentDiv.appendChild(timeDiv);
     
+    // 为AI回复添加复制按钮在时间下方
+    if (type === 'assistant') {
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
+        copyBtn.title = '复制消息';
+        copyBtn.addEventListener('click', () => copyMessage(text, copyBtn));
+        
+        contentDiv.appendChild(copyBtn);
+    }
+    
     messageDiv.appendChild(avatarDiv);
     messageDiv.appendChild(contentDiv);
     
     chatMessages.appendChild(messageDiv);
+    
+    // 高亮代码块（如果存在）
+    if (typeof hljs !== 'undefined') {
+        const codeBlocks = messageDiv.querySelectorAll('pre code');
+        codeBlocks.forEach(block => {
+            hljs.highlightElement(block);
+        });
+    }
     
     // 添加到聊天历史
     chatHistory.push({
