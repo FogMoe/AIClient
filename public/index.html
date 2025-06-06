@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="page.title">雾萌AI</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <i class="fas fa-cloud"></i>
+                    </div>
+                    <span class="logo-text" data-i18n="app.name">雾萌</span>
+                </div>
+                <div class="sidebar-actions">
+                    <button class="new-chat-btn" id="newChatBtn" data-i18n="sidebar.newChat" title="新建对话">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                    <button class="language-toggle" id="languageToggle" title="切换语言">
+                        <i class="fas fa-globe"></i>
+                        <span id="currentLang">中</span>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="chat-history">
+                <div class="section-title" data-i18n="sidebar.today">今天</div>
+                <div class="chat-list" id="chatList">
+                    <!-- 聊天历史将在这里动态添加 -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主聊天区域 -->
+        <main class="main-content">
+            <div class="chat-container">
+                <div class="welcome-screen" id="welcomeScreen">
+                    <div class="welcome-content">
+                        <h1 class="welcome-title">
+                            <span data-i18n="welcome.greeting">早上好</span>
+                        </h1>
+                        <p class="welcome-subtitle" data-i18n="welcome.subtitle">今天有什么可以帮你吗？</p>
+                    </div>
+                </div>
+
+                <div class="chat-messages" id="chatMessages" style="display: none;">
+                    <!-- 聊天消息将在这里显示 -->
+                </div>
+
+                <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                    <div class="message assistant">
+                        <div class="message-avatar">
+                            <div class="avatar-icon">
+                                <i class="fas fa-cloud"></i>
+                            </div>
+                        </div>
+                        <div class="message-content">
+                            <div class="typing-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <form class="message-form" id="messageForm">
+                    <div class="input-container">
+                        <button type="button" class="attach-btn" title="添加附件">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                        <input 
+                            type="text" 
+                            id="messageInput" 
+                            data-i18n-placeholder="input.placeholder"
+                            placeholder="向 雾萌 发送消息" 
+                            autocomplete="off"
+                            maxlength="1000"
+                        >
+                        <button type="submit" id="sendButton" class="send-btn">
+                            <i class="fas fa-arrow-up"></i>
+                        </button>
+                    </div>
+                </form>
+                <div class="input-hint" data-i18n="input.hint">
+                    雾萌AI生成内容仅供参考，请自行甄别其准确性。
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 错误提示模态框 -->
+    <div class="modal" id="errorModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <i class="fas fa-exclamation-triangle"></i>
+                <h3 data-i18n="modal.title">提示</h3>
+            </div>
+            <div class="modal-body">
+                <p id="errorMessage"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeErrorModal()" data-i18n="modal.ok">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 
