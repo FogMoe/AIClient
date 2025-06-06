@@ -3,7 +3,7 @@ require('dotenv').config();
 module.exports = {
     // 服务器配置
     server: {
-        port: 3000,
+        port: 3333,
         host: 'localhost'
     },
     
