@@ -4,8 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="page.title">雾萌AI</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="雾萌AI - 人工智能聊天助手。">
+    <meta name="keywords" content="AI助手,人工智能,聊天机器人,智能对话,雾萌AI,AI chat,artificial intelligence,fogmoe">
+    <meta name="author" content="FOGMOE">
+    <meta name="language" content="zh-CN">
+    
+    <!-- Favicons -->
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    
+    <!-- CSS and External Resources -->
     <link rel="stylesheet" href="styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Preload Important Resources -->
+    <link rel="preload" href="styles.css" as="style">
+    <link rel="preload" href="script.js" as="script">
+    
+    <!-- DNS Prefetch for External Resources -->
+    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
 </head>
 <body>
     <div class="app-container">
@@ -19,8 +37,11 @@
                     <span class="logo-text" data-i18n="app.name">雾萌</span>
                 </div>
                 <div class="sidebar-actions">
-                    <button class="new-chat-btn" id="newChatBtn" data-i18n="sidebar.newChat" title="新建对话">
-                        <i class="fas fa-plus"></i>
+                    <button class="new-chat-btn" id="newChatBtn" title="新建对话">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <button class="export-btn" id="exportBtn" title="导出聊天记录">
+                        <i class="fas fa-download"></i>
                     </button>
                     <button class="language-toggle" id="languageToggle" title="切换语言">
                         <i class="fas fa-globe"></i>

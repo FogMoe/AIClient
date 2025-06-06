@@ -55,6 +55,7 @@ const typingIndicator = document.getElementById('typingIndicator');
 const errorModal = document.getElementById('errorModal');
 const errorMessage = document.getElementById('errorMessage');
 const newChatBtn = document.getElementById('newChatBtn');
+const exportBtn = document.getElementById('exportBtn');
 const languageToggle = document.getElementById('languageToggle');
 const currentLangSpan = document.getElementById('currentLang');
 const chatList = document.getElementById('chatList');
@@ -135,7 +136,8 @@ function updateWelcomeGreeting() {
 messageForm.addEventListener('submit', handleSubmit);
 messageInput.addEventListener('keypress', handleKeyPress);
 messageInput.addEventListener('input', handleInput);
-// newChatBtn.addEventListener('click', startNewChat); // 禁用新建对话功能
+newChatBtn.addEventListener('click', startNewChat); // 恢复新建对话功能
+exportBtn.addEventListener('click', exportChatHistory); // 添加导出功能
 languageToggle.addEventListener('click', toggleLanguage);
 
 // 语言切换 (暂时禁用)
@@ -435,6 +437,61 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+// 导出聊天历史记录功能
+function exportChatHistory() {
+    if (chatHistory.length === 0) {
+        showErrorModal('当前没有聊天记录可以导出。');
+        return;
+    }
+    
+    try {
+        // 格式化聊天记录
+        let exportText = '雾萌AI 聊天记录\n';
+        exportText += '=' .repeat(30) + '\n';
+        exportText += `导出时间: ${new Date().toLocaleString('zh-CN')}\n`;
+        exportText += `会话ID: ${sessionId}\n`;
+        exportText += `消息总数: ${chatHistory.length}\n`;
+        exportText += '=' .repeat(30) + '\n\n';
+        
+        chatHistory.forEach((message, index) => {
+            const time = formatTime(message.timestamp);
+            const sender = message.type === 'user' ? '用户' : '雾萌AI';
+            
+            exportText += `[${time}] ${sender}:\n`;
+            exportText += `${message.text}\n\n`;
+        });
+        
+        exportText += '=' .repeat(30) + '\n';
+        exportText += '导出完成 - 感谢使用雾萌AI\n';
+        
+        // 创建并下载文件
+        const blob = new Blob([exportText], { type: 'text/plain;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // 生成文件名
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 19).replace(/[T:]/g, '-');
+        a.download = `雾萌AI聊天记录_${dateStr}.txt`;
+        
+        // 触发下载
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        // 清理URL对象
+        window.URL.revokeObjectURL(url);
+        
+        console.log('聊天记录导出成功');
+        
+    } catch (error) {
+        console.error('导出聊天记录失败:', error);
+        showErrorModal('导出聊天记录时发生错误，请稍后再试。');
+    }
 }
 
 // 网络状态监听

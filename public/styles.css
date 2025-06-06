@@ -68,7 +68,7 @@ body {
     gap: 8px;
 }
 
-.new-chat-btn, .language-toggle {
+.new-chat-btn, .export-btn, .language-toggle {
     height: 32px;
     border: none;
     background: transparent;
@@ -81,12 +81,12 @@ body {
     transition: background-color 0.2s ease;
 }
 
-.new-chat-btn {
+.new-chat-btn, .export-btn {
     width: 32px;
-    display: none; /* 隐藏新建对话按钮 */
+    display: flex;
 }
 
-.new-chat-btn:hover, .language-toggle:hover {
+.new-chat-btn:hover, .export-btn:hover, .language-toggle:hover {
     background: #e1e1e1;
 }
 
