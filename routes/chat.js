@@ -13,8 +13,8 @@ function validateAndSanitizeInput(message) {
     }
     
     // 长度验证
-    if (message.length > 10000) {
-        throw new Error('消息长度不能超过10000个字符');
+    if (message.length > 5000) {
+        throw new Error('消息长度不能超过5000个字符');
     }
     
     // 清理潜在的恶意内容
