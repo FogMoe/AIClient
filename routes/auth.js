@@ -3,6 +3,9 @@ const crypto = require('crypto');
 const router = express.Router();
 const { validateLogin, getUserById } = require('../config/database');
 const { logger } = require('../utils/logger');
+const { handleUnauthorized } = require('../utils/errorHandler');
+const { verifyTurnstile } = require('../utils/turnstile');
+const config = require('../config');
 
 // 登录失败计数器（内存存储，生产环境建议使用Redis）
 const loginAttempts = new Map();
@@ -38,7 +41,7 @@ router.get('/login', (req, res) => {
 // 处理登录请求
 router.post('/login', async (req, res) => {
     try {
-        const { userId, password } = req.body;
+        const { userId, password, turnstileToken } = req.body;
         const clientIP = req.ip || req.connection.remoteAddress;
 
         // 验证输入（先进行基本验证）
@@ -70,6 +73,17 @@ router.post('/login', async (req, res) => {
                 success: false,
                 message: '输入包含非法字符'
             });
+        }
+
+        // Turnstile验证
+        if (config.turnstile.enabled) {
+            const isValidTurnstile = await verifyTurnstile(turnstileToken, clientIP);
+            if (!isValidTurnstile) {
+                return res.status(400).json({
+                    success: false,
+                    message: '人机验证失败，请重试'
+                });
+            }
         }
 
         // 现在userId已经验证过了，可以安全使用
@@ -203,11 +217,7 @@ function requireAuth(req, res, next) {
     if (req.session.user) {
         next();
     } else {
-        res.status(401).json({
-            success: false,
-            message: '请先登录',
-            redirectUrl: '/auth/login'
-        });
+        handleUnauthorized(req, res);
     }
 }
 

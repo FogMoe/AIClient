@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>错误 - 雾萌娘</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="AI人工智能聊天助手">
+    <meta name="keywords" content="AI,雾萌娘,AI助手,人工智能,聊天机器人,智能对话,雾萌AI,AI chat,artificial intelligence,fogmoe">
+    <meta name="author" content="FOGMOE">
+    <meta name="language" content="zh-CN">
+    
+    <!-- Favicons -->
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+      <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #333;
+        }
+
+        .error-container {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e1e1e1;
+            text-align: center;
+        }
+
+        .error-header {
+            margin-bottom: 30px;
+        }
+
+        .error-logo {
+            font-size: 28px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .error-logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(45deg, #0078d4, #00bcf2);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .error-code {
+            font-size: 48px;
+            font-weight: 700;
+            color: #0078d4;
+            margin-bottom: 16px;
+            line-height: 1;
+        }
+
+        .error-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 16px;
+        }
+
+        .error-description {
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .error-button {
+            width: 100%;
+            padding: 14px;
+            background: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .error-button:hover {
+            background: #106ebe;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 120, 212, 0.2);
+        }
+
+        .error-details {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e1e1e1;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .error-time {
+            margin-bottom: 8px;
+        }
+
+        .login-info {
+            text-align: center;
+            padding: 16px;
+            background: #fafafa;
+            border-radius: 6px;
+            margin-top: 20px;
+            border: 1px solid #e1e1e1;
+        }
+
+        .login-text {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .login-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #0078d4;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            padding: 8px 16px;
+            background: rgba(0, 120, 212, 0.1);
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .login-link:hover {
+            background: rgba(0, 120, 212, 0.15);
+            transform: translateY(-1px);
+        }
+
+        @media (max-width: 768px) {
+            .error-container {
+                padding: 30px 24px;
+                margin: 16px;
+                max-width: 380px;
+            }
+            
+            .error-logo {
+                font-size: 24px;
+                gap: 8px;
+            }
+
+            .error-logo-icon {
+                width: 28px;
+                height: 28px;
+                font-size: 14px;
+            }
+
+            .error-code {
+                font-size: 40px;
+            }
+
+            .error-title {
+                font-size: 20px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .error-container {
+                padding: 24px 20px;
+                margin: 12px;
+            }
+            
+            .error-logo {
+                font-size: 22px;
+            }
+
+            .error-code {
+                font-size: 36px;
+            }
+
+            .login-info {
+                padding: 12px;
+            }
+        }
+    </style>
+</head>
+<body>    <div class="error-container">
+        <div class="error-header">
+            <h1 class="error-logo">
+                <div class="error-logo-icon">
+                    <i class="fas fa-cloud"></i>
+                </div>
+                雾萌娘
+            </h1>
+        </div>
+        
+        <div class="error-code" id="errorCode">404</div>
+        <h2 class="error-title" id="errorTitle">页面未找到</h2>
+        <p class="error-description" id="errorDescription">
+            抱歉，您访问的页面不存在或已被移动。
+        </p>
+        
+        <a href="/" class="error-button">
+            <i class="fas fa-home"></i>
+            返回首页
+        </a>
+        
+        <div class="error-details">
+            <div class="error-time" id="errorTime"></div>
+            <div>如果问题持续存在，请联系技术支持</div>
+        </div>
+        
+        <!-- 登录提示区域（仅在401错误时显示） -->
+        <div class="login-info" id="loginInfo" style="display: none;">
+            <p class="login-text">您需要登录才能访问此页面</p>
+            <a href="/auth/login" class="login-link">
+                <i class="fas fa-sign-in-alt"></i>
+                立即登录
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // 设置错误时间
+        document.getElementById('errorTime').textContent = 
+            '错误时间：' + new Date().toLocaleString('zh-CN');
+
+        // 根据URL参数显示不同的错误信息
+        const urlParams = new URLSearchParams(window.location.search);
+        const errorCode = urlParams.get('code') || '404';
+        const errorType = urlParams.get('type') || 'not_found';        const errorMessages = {
+            '400': {
+                title: '请求错误',
+                description: '您的请求格式不正确，请检查后重试。'
+            },
+            '401': {
+                title: '未授权访问',
+                description: '您需要登录才能访问此页面。'
+            },
+            '403': {
+                title: '访问被禁止',
+                description: '您没有权限访问此页面。'
+            },
+            '404': {
+                title: '页面未找到',
+                description: '抱歉，您访问的页面不存在或已被移动。'
+            },
+            '500': {
+                title: '服务器错误',
+                description: '服务器遇到了一个错误，请稍后重试。'
+            },
+            '502': {
+                title: '网关错误',
+                description: '服务器作为网关或代理时收到无效响应。'
+            },
+            '503': {
+                title: '服务不可用',
+                description: '服务器暂时无法处理请求，请稍后重试。'
+            }
+        };
+
+        const errorInfo = errorMessages[errorCode] || errorMessages['404'];
+
+        // 更新页面内容
+        document.getElementById('errorCode').textContent = errorCode;
+        document.getElementById('errorTitle').textContent = errorInfo.title;
+        document.getElementById('errorDescription').textContent = errorInfo.description;
+
+        // 更新页面标题
+        document.title = `错误 ${errorCode} - 雾萌娘`;
+
+        // 如果是401错误，显示登录提示
+        if (errorCode === '401') {
+            document.getElementById('loginInfo').style.display = 'block';
+        }        // 添加键盘快捷键
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Home' || (e.ctrlKey && e.key === 'h')) {
+                window.location.href = '/';
+            }
+        });
+    </script>
+</body>
+</html>

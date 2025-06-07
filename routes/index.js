@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const chatRoutes = require('./chat');
 const { router: authRoutes, requireAuth } = require('./auth');
+const config = require('../config');
 
 const router = express.Router();
 
@@ -18,6 +19,25 @@ router.get('/', (req, res) => {
 
 // 聊天API路由（需要登录）
 router.use('/api/chat', requireAuth, chatRoutes);
+
+// Turnstile配置API
+router.get('/api/turnstile-config', (req, res) => {
+    // 确保siteKey是字符串类型
+    let siteKey = config.turnstile.siteKey;
+    if (siteKey && typeof siteKey !== 'string') {
+        siteKey = String(siteKey);
+    }
+    
+    res.json({
+        enabled: config.turnstile.enabled,
+        siteKey: siteKey
+    });
+});
+
+// 错误页面路由
+router.get('/error', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'error.html'));
+});
 
 // 健康检查端点
 router.get('/health', (req, res) => {

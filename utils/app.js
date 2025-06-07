@@ -5,6 +5,7 @@ const session = require('express-session');
 const routes = require('../routes');
 const { setupConsoleOverride, logger } = require('./logger');
 const { testConnection } = require('../config/database');
+const { handleNotFound, handleServerError } = require('./errorHandler');
 
 function createApp() {
     const app = express();
@@ -23,7 +24,9 @@ function createApp() {
                 scriptSrc: [
                     "'self'", 
                     "'unsafe-inline'",
-                    "https://cdnjs.cloudflare.com"
+                    "https://cdnjs.cloudflare.com",
+                    "https://challenges.cloudflare.com", // 添加Cloudflare Turnstile域名
+                    // "'unsafe-eval'" // 添加对eval的支持，Turnstile可能需要此功能
                 ],
                 styleSrc: [
                     "'self'", 
@@ -34,11 +37,11 @@ function createApp() {
                     "'self'", 
                     "https://cdnjs.cloudflare.com"
                 ],
-                connectSrc: ["'self'"],
+                connectSrc: ["'self'", "https://challenges.cloudflare.com"], // 添加Cloudflare API调用支持
                 imgSrc: ["'self'", "data:", "https:"],
                 objectSrc: ["'none'"],
                 mediaSrc: ["'self'"],
-                frameSrc: ["'none'"]
+                frameSrc: ["'self'", "https://challenges.cloudflare.com"] // 允许Cloudflare的iframe
             },
         },
         crossOriginEmbedderPolicy: false, // 避免CORS问题
@@ -79,22 +82,15 @@ function createApp() {
     
     // 路由
     app.use('/', routes);
-    
-    // 404处理
+     // 404处理 - 使用统一的错误处理
     app.use((req, res) => {
-        res.status(404).json({
-            error: '页面不存在',
-            timestamp: new Date().toISOString()
-        });
+        handleNotFound(req, res);
     });
-    
+
     // 错误处理中间件
     app.use((error, req, res, next) => {
         logger.error('服务器错误:', error);
-        res.status(500).json({
-            error: '服务器内部错误',
-            timestamp: new Date().toISOString()
-        });
+        handleServerError(req, res, error);
     });
     
     return app;

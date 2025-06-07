@@ -636,23 +636,22 @@ function exportChatHistory() {
     
     try {
         // 格式化聊天记录
-        let exportText = '雾萌AI 聊天记录\n';
+        let exportText = '雾萌娘 聊天记录\n';
         exportText += '=' .repeat(30) + '\n';
         exportText += `导出时间: ${new Date().toLocaleString('zh-CN')}\n`;
-        exportText += `会话ID: ${sessionId}\n`;
         exportText += `消息总数: ${chatHistory.length}\n`;
         exportText += '=' .repeat(30) + '\n\n';
         
         chatHistory.forEach((message, index) => {
             const time = formatTime(message.timestamp);
-            const sender = message.type === 'user' ? '用户' : '雾萌AI';
+            const sender = message.type === 'user' ? '用户' : '雾萌娘';
             
             exportText += `[${time}] ${sender}:\n`;
             exportText += `${message.text}\n\n`;
         });
         
         exportText += '=' .repeat(30) + '\n';
-        exportText += '导出完成 - 感谢使用雾萌AI\n';
+        exportText += 'https://chat.fog.moe/\n';
         
         // 创建并下载文件
         const blob = new Blob([exportText], { type: 'text/plain;charset=utf-8' });
@@ -664,7 +663,7 @@ function exportChatHistory() {
         // 生成文件名
         const now = new Date();
         const dateStr = now.toISOString().slice(0, 19).replace(/[T:]/g, '-');
-        a.download = `雾萌AI聊天记录_${dateStr}.txt`;
+        a.download = `雾萌娘聊天记录_${dateStr}.txt`;
         
         // 触发下载
         document.body.appendChild(a);

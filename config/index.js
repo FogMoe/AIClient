@@ -16,11 +16,17 @@ module.exports = {
         maxTokens: 1000,
         temperature: 1.0
     },
-    
-    // 频率限制配置
+      // 频率限制配置
     rateLimit: {
         windowMs: 60 * 1000, // 1分钟（毫秒）
         maxRequests: 5, // 每分钟最大请求数
+    },
+      // Cloudflare Turnstile 配置
+    turnstile: {
+        // 确保siteKey是字符串
+        siteKey: String(process.env.TURNSTILE_SITE_KEY || "<REPLACE_WITH_YOUR_TURNSTILE_SITE_KEY>"),
+        secretKey: String(process.env.TURNSTILE_SECRET_KEY || "<REPLACE_WITH_YOUR_TURNSTILE_SECRET_KEY>"),
+        enabled: 'true'
     },
     
     // 日志配置
