@@ -17,8 +17,7 @@
     <!-- CSS and External Resources -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     
-    <!-- Cloudflare Turnstile -->
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <!-- Cloudflare Turnstile will be loaded dynamically when needed -->
     
     <!-- DNS Prefetch for External Resources -->
     <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
@@ -202,10 +201,25 @@
             animation: spin 1s ease-in-out infinite;
         }
 
+        .loading.dark {
+            border: 2px solid rgba(0, 120, 212, 0.3);
+            border-top-color: #0078d4;
+        }
+
         .turnstile-widget {
             margin: 20px 0;
             display: flex;
             justify-content: center;
+            min-height: 65px;
+            align-items: center;
+        }
+
+        .turnstile-loading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #666;
+            font-size: 14px;
         }
 
         .cf-turnstile {
@@ -279,7 +293,7 @@
                 <input type="password" id="password" name="password" class="form-input" 
                        placeholder="请输入您的密码" required>
             </div>            <!-- Turnstile 验证小部件 -->
-            <div class="turnstile-widget">
+            <div class="turnstile-widget" id="turnstile-widget" style="display: none;">
                 <div id="turnstile-container"></div>
             </div>
 
@@ -300,88 +314,123 @@
     <script>
         // 检查DOM元素是否存在
         const loginForm = document.getElementById('loginForm');
-        const messageContainer = document.getElementById('messageContainer');        const loginBtn = document.getElementById('loginBtn');
+        const messageContainer = document.getElementById('messageContainer');
+        const loginBtn = document.getElementById('loginBtn');
         const loginText = document.getElementById('loginText');
-        const loginSpinner = document.getElementById('loginSpinner');        let messageTimeout = null;
-        let turnstileToken = null;// 获取Turnstile配置
+        const loginSpinner = document.getElementById('loginSpinner');
+        const turnstileWidget = document.getElementById('turnstile-widget');
+        const turnstileContainer = document.getElementById('turnstile-container');
+
+        let messageTimeout = null;
+        let turnstileToken = null;
         let turnstileEnabled = false;
-        let turnstileSiteKey = '';        // Turnstile初始化函数
-        function initializeTurnstile() {
-              if (turnstileEnabled && turnstileSiteKey && window.turnstile) {
-                // 先清除现有的小部件
-                const turnstileWidget = document.getElementById('turnstile-container');
-                if (turnstileWidget) {
-                    turnstileWidget.innerHTML = '';
-                    
-                    try {
-                        // 渲染Turnstile小部件
-                        // 确保sitekey是字符串类型，并验证格式
-                        const sitekey = String(turnstileSiteKey).trim();
-                        
-                        if (!sitekey || sitekey === 'undefined' || sitekey === 'null') {
-                            return;
-                        }
-                                            
-                        window.turnstile.render(turnstileWidget, {
-                            sitekey: sitekey,
-                            theme: 'light',
-                            size: 'normal',
-                            callback: function(token) {
-                                turnstileToken = token;
-                            },
-                            'error-callback': function() {
-                                turnstileToken = null;
-                            },
-                            'expired-callback': function() {
-                                turnstileToken = null;
-                            }
-                        });
-                    } catch (error) {
-                    }
+        let turnstileSiteKey = '';
+        let turnstileLoaded = false;
+        let turnstileScriptLoaded = false;
+
+        // 动态加载Turnstile脚本
+        function loadTurnstileScript() {
+            return new Promise((resolve, reject) => {
+                if (turnstileScriptLoaded) {
+                    resolve();
+                    return;
                 }
-            } else if (!turnstileEnabled) {
-                // 如果未启用Turnstile，隐藏小部件
-                const turnstileContainer = document.querySelector('.turnstile-widget');
-                if (turnstileContainer) {
-                    turnstileContainer.style.display = 'none';
-                }
+
+                const script = document.createElement('script');
+                script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+                script.async = true;
+                script.defer = true;
+                
+                script.onload = () => {
+                    turnstileScriptLoaded = true;
+                    resolve();
+                };
+                
+                script.onerror = () => {
+                    reject(new Error('Failed to load Turnstile script'));
+                };
+                
+                document.head.appendChild(script);
+            });
+        }
+
+        // Turnstile初始化函数
+        async function initializeTurnstile() {
+            if (!turnstileEnabled || !turnstileSiteKey) {
+                return false;
             }
-        }// 从服务器获取Turnstile配置
-        fetch('/api/turnstile-config')
-            .then(response => response.json())
-            .then(data => {
+
+            try {
+                // 显示加载状态
+                turnstileWidget.style.display = 'flex';
+                turnstileContainer.innerHTML = '<div class="turnstile-loading"><div class="loading dark"></div><span>正在加载验证...</span></div>';
+
+                // 加载Turnstile脚本
+                await loadTurnstileScript();
+
+                // 等待Turnstile API可用
+                let attempts = 0;
+                while (!window.turnstile && attempts < 50) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    attempts++;
+                }
+
+                if (!window.turnstile) {
+                    throw new Error('Turnstile API not available');
+                }
+
+                // 清除加载状态
+                turnstileContainer.innerHTML = '';
+
+                // 渲染Turnstile小部件
+                const sitekey = String(turnstileSiteKey).trim();
+                if (!sitekey || sitekey === 'undefined' || sitekey === 'null') {
+                    throw new Error('Invalid site key');
+                }
+
+                window.turnstile.render(turnstileContainer, {
+                    sitekey: sitekey,
+                    theme: 'light',
+                    size: 'normal',
+                    callback: function(token) {
+                        turnstileToken = token;
+                    },
+                    'error-callback': function() {
+                        turnstileToken = null;
+                        showMessage('验证失败，请重试');
+                    },
+                    'expired-callback': function() {
+                        turnstileToken = null;
+                        showMessage('验证已过期，请重新验证');
+                    }
+                });
+
+                turnstileLoaded = true;
+                return true;
+            } catch (error) {
+                console.error('Turnstile initialization failed:', error);
+                turnstileWidget.style.display = 'none';
+                showMessage('验证组件加载失败，请刷新页面重试');
+                return false;
+            }
+        }
+
+        // 获取Turnstile配置
+        async function getTurnstileConfig() {
+            try {
+                const response = await fetch('/api/turnstile-config');
+                const data = await response.json();
                 turnstileEnabled = data.enabled;
                 turnstileSiteKey = data.siteKey;
                 
-                // 确保siteKey是字符串
                 if (typeof turnstileSiteKey !== 'string') {
                     turnstileSiteKey = String(turnstileSiteKey);
                 }
-                
-                // 等待Turnstile脚本加载完成
-                function waitForTurnstile() {
-                    if (window.turnstile) {
-                        initializeTurnstile();
-                    } else {
-                        setTimeout(waitForTurnstile, 100);
-                    }
-                }
-                
-                // 如果页面已加载完成，立即开始等待
-                if (document.readyState === 'complete') {
-                    waitForTurnstile();
-                } else {
-                    // 否则等待页面加载完成
-                    window.addEventListener('load', waitForTurnstile);
-                }
-            })
-            .catch((error) => {
-                // 如果无法获取配置，隐藏Turnstile小部件
-                const turnstileContainer = document.querySelector('.turnstile-widget');
-                if (turnstileContainer) {
-                    turnstileContainer.style.display = 'none';
-                }
-            });
+            } catch (error) {
+                console.error('Failed to get Turnstile config:', error);
+                turnstileEnabled = false;
+            }
+        }
 
         function showMessage(message, type = 'error') {            
             // 检查元素是否存在
@@ -431,73 +480,87 @@
         // 确保loginForm存在再绑定事件
         if (loginForm) {
             loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            // 清除之前的错误消息
-            clearMessage();
-              const userId = document.getElementById('userId').value.trim();
-            const password = document.getElementById('password').value;
-
-            if (!userId || !password) {
-                showMessage('请输入用户ID和密码');
-                return;
-            }
-
-            // 如果启用了Turnstile验证，检查token
-            if (turnstileEnabled && !turnstileToken) {
-                showMessage('请先完成验证');
-                return;
-            }
-
-            setLoading(true);
-
-            try {
-                const requestBody = { userId, password };
+                e.preventDefault();
                 
-                // 如果启用了Turnstile，添加token
-                if (turnstileEnabled && turnstileToken) {
-                    requestBody.turnstileToken = turnstileToken;
+                clearMessage();
+                const userId = document.getElementById('userId').value.trim();
+                const password = document.getElementById('password').value;
+
+                if (!userId || !password) {
+                    showMessage('请输入用户ID和密码');
+                    return;
                 }
 
-                const response = await fetch('/auth/login', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(requestBody)
-                });
+                setLoading(true);
 
-                const data = await response.json();
+                try {
+                    // 如果启用了Turnstile且还未加载，先加载
+                    if (turnstileEnabled && !turnstileLoaded) {
+                        const success = await initializeTurnstile();
+                        if (!success) {
+                            setLoading(false);
+                            return;
+                        }
+                        
+                        // 等待用户完成验证
+                        showMessage('请完成登录验证', 'error');
+                        setLoading(false);
+                        return;
+                    }
 
-                if (data.success) {
-                    showMessage('登录成功，正在跳转...', 'success');
-                    setTimeout(() => {
-                        window.location.href = '/';
-                    }, 1000);                } else {
-                    showMessage(data.message || '登录失败');
+                    // 如果启用了Turnstile验证，检查token
+                    if (turnstileEnabled && !turnstileToken) {
+                        showMessage('请完成登录验证');
+                        setLoading(false);
+                        return;
+                    }
+
+                    const requestBody = { userId, password };
+                    
+                    // 如果启用了Turnstile，添加token
+                    if (turnstileEnabled && turnstileToken) {
+                        requestBody.turnstileToken = turnstileToken;
+                    }
+
+                    const response = await fetch('/auth/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        showMessage('登录成功，正在跳转...', 'success');
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 1000);
+                    } else {
+                        showMessage(data.message || '登录失败');
+                        
+                        // 重置Turnstile
+                        if (turnstileEnabled && turnstileLoaded && window.turnstile) {
+                            if (turnstileContainer && turnstileContainer.children.length > 0) {
+                                window.turnstile.reset();
+                            }
+                            turnstileToken = null;
+                        }
+                    }
+                } catch (error) {
+                    showMessage('网络错误，请稍后再试');
                     
                     // 重置Turnstile
-                    if (turnstileEnabled && window.turnstile) {
-                        const turnstileWidget = document.getElementById('turnstile-container');
-                        if (turnstileWidget && turnstileWidget.children.length > 0) {
+                    if (turnstileEnabled && turnstileLoaded && window.turnstile) {
+                        if (turnstileContainer && turnstileContainer.children.length > 0) {
                             window.turnstile.reset();
                         }
                         turnstileToken = null;
                     }
-                }            } catch (error) {
-                showMessage('网络错误，请稍后再试');
-                
-                // 重置Turnstile
-                if (turnstileEnabled && window.turnstile) {
-                    const turnstileWidget = document.getElementById('turnstile-container');
-                    if (turnstileWidget && turnstileWidget.children.length > 0) {
-                        window.turnstile.reset();
-                    }
-                    turnstileToken = null;
+                } finally {
+                    setLoading(false);
                 }
-            } finally {
-                setLoading(false);
-            }
             });
             
             // 在用户输入时清除错误消息
@@ -507,17 +570,21 @@
             if (passwordInput) passwordInput.addEventListener('input', clearMessage);
         }
 
-        // 检查是否已登录
-        fetch('/auth/status')
-            .then(response => response.json())
-            .then(data => {
+        // 页面加载时获取配置但不初始化Turnstile
+        document.addEventListener('DOMContentLoaded', async () => {
+            await getTurnstileConfig();
+            
+            // 检查是否已登录
+            try {
+                const response = await fetch('/auth/status');
+                const data = await response.json();
                 if (data.loggedIn) {
                     window.location.href = '/';
                 }
-            })
-            .catch(() => {
+            } catch (error) {
                 // 静默处理错误
-            });
+            }
+        });
     </script>
 </body>
-</html> 
+</html>
