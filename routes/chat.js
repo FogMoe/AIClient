@@ -148,9 +148,50 @@ router.post('/', rateLimitMiddleware, async (req, res) => {
             req.session.user ? req.session.user.coins : undefined
         );
         
+        // 检查AI服务是否返回错误
+        if (result.error) {
+            // AI服务不可用，需要退还金币（如果已扣除）
+            if (req.session.user && !isHistoryFetch && sanitizedMessage !== 'ping') {
+                const userId = req.session.user.id;
+                
+                // 计算需要退还的金币数量
+                let coinCost = 1;
+                if (sanitizedMessage.length > 600) {
+                    coinCost = 3;
+                } else if (sanitizedMessage.length > 300) {
+                    coinCost = 2;
+                }
+                
+                // 退还金币
+                try {
+                    const refundResult = await updateUserCoins(userId, coinCost);
+                    if (refundResult.success) {
+                        req.session.user.coins = refundResult.newCoins;
+                        logger.info(`AI服务不可用，已退还用户 ${userId} 金币 ${coinCost}，当前余额 ${refundResult.newCoins}`);
+                    }
+                } catch (refundError) {
+                    logger.error(`退还金币失败: ${refundError.message}`);
+                }
+            }
+            
+            // 直接返回错误响应，不保存到数据库
+            return res.json({
+                response: result.response,
+                timestamp: result.timestamp,
+                updatedCoins: req.session.user ? req.session.user.coins : undefined
+            });
+        }
+        
         // 如果扣除了金币，添加到响应中
         if (req.session.user) {
             result.updatedCoins = req.session.user.coins;
+        }
+        
+        // 记录AI提供商信息（只记录日志，不发送给前端）
+        if (result.provider) {
+            logger.info(`AI提供商: ${result.provider}`);
+            // 从响应中删除提供商信息，不发送给前端
+            delete result.provider;
         }
         
         // 如果用户已登录且聊天成功，保存聊天记录
@@ -164,15 +205,11 @@ router.post('/', rateLimitMiddleware, async (req, res) => {
                     { role: 'assistant', content: result.response }
                 ];
                 
-                // 过滤掉测试消息（ping-pong等）
+                // 过滤掉测试消息（ping-pong）
                 const filteredNewMessages = newMessages.filter(msg => {
                     const content = msg.content.toLowerCase().trim();
                     // 过滤ping-pong测试消息
                     if (content === 'ping' || content === 'pong') {
-                        return false;
-                    }
-                    // 过滤其他明确的测试消息
-                    if (/^(test|测试)$/i.test(content)) {
                         return false;
                     }
                     return true;

@@ -1,4 +1,5 @@
 const { AzureOpenAI } = require("openai");
+const OpenAI = require("openai");
 const config = require('../config');
 const { logger } = require('../utils/logger');
 
@@ -16,43 +17,87 @@ function sanitizeForDisplay(text) {
         .replace(/\//g, '&#x2F;');
 }
 
-// 模拟AI响应函数
-function generateSimulatedResponse(message, history = []) {
-    // 清理输入以防止注入
-    const safeMessage = sanitizeForDisplay(message);
-    
-    // 如果有对话历史，尝试生成更有上下文的回复
-    if (history.length > 0) {
-        const lastUserMessage = history.filter(msg => msg.role === 'user').pop();
-        if (lastUserMessage && lastUserMessage.content) {
-            const safeLastMessage = sanitizeForDisplay(lastUserMessage.content);
-            const contextResponses = [
-                `我记得您之前提到了"${safeLastMessage}"，现在您又说"${safeMessage}"。让我结合这些信息来回答您。`,
-                `基于我们之前的对话，特别是您提到的"${safeLastMessage}"，我认为"${safeMessage}"是一个很好的延续。`,
-                `我注意到您在继续我们之前关于"${safeLastMessage}"的讨论。关于"${safeMessage}"，我有以下想法...`,
-                `结合您之前的问题和现在的"${safeMessage}"，我觉得我们的对话很有深度。`,
-                `从您之前的"${safeLastMessage}"到现在的"${safeMessage}"，我看到了思路的发展。`
-            ];
-            return contextResponses[Math.floor(Math.random() * contextResponses.length)];
-        }
-    }
-    
-    // 默认响应（没有历史记录时）
-    const responses = [
-        `您好！我收到了您的消息："${safeMessage}"。我是一个AI助手，目前在演示模式下运行。`,
-        `这是一个很有趣的问题。关于"${safeMessage}"，我认为这需要仔细考虑。`,
-        `感谢您的提问："${safeMessage}"。我正在处理您的请求...`,
-        `您提到了"${safeMessage}"，这让我想到了很多相关的话题。`,
-        `我理解您说的"${safeMessage}"。让我为您提供一些有用的信息。`
-    ];
-    
-    return responses[Math.floor(Math.random() * responses.length)];
-}
-
 // 检查是否配置了Azure OpenAI
 function isAzureConfigured() {
     return config.azureOpenAI.apiKey !== "<REPLACE_WITH_YOUR_KEY_VALUE_HERE>" && 
            config.azureOpenAI.apiKey !== "";
+}
+
+// 检查是否配置了Gemini API
+function isGeminiConfigured() {
+    return config.geminiAI.enabled && 
+           config.geminiAI.apiKey !== "<REPLACE_WITH_YOUR_GEMINI_API_KEY>" && 
+           config.geminiAI.apiKey !== "";
+}
+
+// 使用Gemini API处理聊天
+async function processWithGemini(messages) {
+    try {
+        logger.info('使用Gemini API处理聊天请求');
+        
+        // 创建OpenAI客户端（Gemini支持OpenAI兼容API）
+        const client = new OpenAI({
+            apiKey: config.geminiAI.apiKey,
+            baseURL: config.geminiAI.baseURL,
+        });
+
+        const result = await client.chat.completions.create({
+            model: config.geminiAI.model,
+            messages: messages,
+            max_tokens: config.geminiAI.maxTokens,
+            temperature: config.geminiAI.temperature,
+        });
+
+        let aiResponse = result.choices[0].message.content;
+        logger.info('Gemini API响应成功');
+        
+        return aiResponse;
+    } catch (error) {
+        let errorMessage = `Gemini API 错误: ${error && error.message ? error.message : String(error)}\n`;
+        errorMessage += `Gemini 错误详情: ${error && error.stack ? error.stack : JSON.stringify(error)}\n`;
+        errorMessage += `Gemini 原始错误对象(JSON): ${JSON.stringify(error)}\n`;
+        errorMessage += `Gemini 原始错误对象(String): ${String(error)}\n`;
+        if (error.response) {
+            errorMessage += `Gemini 响应错误: ${JSON.stringify(error.response.data || error.response)}\n`;
+        }
+        logger.error(errorMessage);
+        throw error;
+    }
+}
+
+// 使用Azure OpenAI处理聊天
+async function processWithAzure(messages) {
+    try {
+        logger.info('使用Azure OpenAI处理聊天请求');
+        
+        const client = new AzureOpenAI({
+            endpoint: config.azureOpenAI.endpoint,
+            apiKey: config.azureOpenAI.apiKey,
+            apiVersion: config.azureOpenAI.apiVersion,
+            deployment: config.azureOpenAI.deployment
+        });
+
+        const result = await client.chat.completions.create({
+            messages: messages,
+            max_tokens: config.azureOpenAI.maxTokens,
+            temperature: config.azureOpenAI.temperature,
+        });
+
+        let aiResponse = result.choices[0].message.content;
+        logger.info('Azure OpenAI响应成功');
+        
+        return aiResponse;
+    } catch (error) {
+        let errorMessage = `Azure OpenAI 错误: ${error && error.message ? error.message : String(error)}\n`;
+        errorMessage += `Azure 错误详情: ${error && error.stack ? error.stack : JSON.stringify(error)}\n`;
+        errorMessage += `Azure 原始错误对象(JSON): ${JSON.stringify(error)}\n`;
+        errorMessage += `Azure 原始错误对象(String): ${String(error)}\n`;
+        if (error.response) {
+            errorMessage += `Azure 响应错误: ${JSON.stringify(error.response.data || error.response)}\n`;
+        }
+        logger.error(errorMessage);
+        throw error;
+    }
 }
 
 // 处理AI聊天请求
@@ -67,90 +112,123 @@ async function processChat(message, history, sessionId, userCoins) {
             };
         }
 
-        // 如果没有配置API密钥，返回模拟响应
-        if (!isAzureConfigured()) {
-            logger.info('未配置Azure OpenAI API密钥，使用模拟响应');
-            const simulatedResponse = generateSimulatedResponse(message, history);
-            
+        // 获取系统提示词，并添加用户硬币数量信息
+        const systemMessage = config.assistant.getSystemMessage();
+        const systemMessageWithCoins = userCoins !== undefined 
+            ? `${systemMessage}\n用户硬币数量: ${userCoins}`
+            : systemMessage;
 
-            
-            return {
-                response: simulatedResponse,
-                timestamp: new Date().toISOString()
-            };
-        }
+        // 构建完整的对话消息数组
+        const messages = [
+            { role: "system", content: systemMessageWithCoins },
+            ...history,
+            { role: "user", content: message }
+        ];
 
-        // 使用Azure OpenAI
-        try {
-            const client = new AzureOpenAI({
-                endpoint: config.azureOpenAI.endpoint,
-                apiKey: config.azureOpenAI.apiKey,
-                apiVersion: config.azureOpenAI.apiVersion,
-                deployment: config.azureOpenAI.deployment
-            });
+        let aiResponse;
+        let aiProvider = 'none';
 
-            // 获取系统提示词，并添加用户硬币数量信息
-            const systemMessage = config.assistant.getSystemMessage();
-            const systemMessageWithCoins = userCoins !== undefined 
-                ? `${systemMessage}\n用户硬币数量: ${userCoins}`
-                : systemMessage;
-
-            // 构建完整的对话消息数组
-            const messages = [
-                { role: "system", content: systemMessageWithCoins },
-                ...history,
-                { role: "user", content: message }
-            ];
-
-            const result = await client.chat.completions.create({
-                messages: messages,
-                max_tokens: config.azureOpenAI.maxTokens,
-                temperature: config.azureOpenAI.temperature,
-            });
-
-            let aiResponse = result.choices[0].message.content;
-
-            // 对AI回复进行基本的安全检查（移除明显的脚本攻击）
-            if (typeof aiResponse === 'string') {
-                aiResponse = aiResponse
-                    .replace(/<script[\s\S]*?<\/script>/gi, '') // 移除script标签
-                    .replace(/javascript:/gi, '') // 移除javascript协议
-                    .replace(/on\w+\s*=/gi, ''); // 移除事件属性
-            } else {
-                aiResponse = '抱歉，出现异常，请稍后再试';
+        // 首先尝试使用Gemini API（如果已配置并启用）
+        if (isGeminiConfigured()) {
+            try {
+                aiResponse = await processWithGemini(messages);
+                aiProvider = 'gemini';
+            } catch (geminiError) {
+                logger.warn(`Gemini API调用失败，尝试回退到Azure OpenAI: ${geminiError.message || '未知错误'}`);
+                // 回退到Azure（如果已配置）
+                if (isAzureConfigured()) {
+                    try {
+                        aiResponse = await processWithAzure(messages);
+                        aiProvider = 'azure';
+                    } catch (azureError) {
+                        logger.error(`Azure OpenAI回退也失败: ${azureError.message || '未知错误'}`);
+                        // 两个AI都失败，返回错误消息
+                        return {
+                            response: "抱歉，AI服务暂时不可用，请稍后再试。",
+                            timestamp: new Date().toISOString(),
+                            provider: 'none',
+                            error: true
+                        };
+                    }
+                } else {
+                    logger.error('Gemini API失败且Azure未配置，返回错误消息');
+                    // 返回错误消息而不是模拟响应
+                    return {
+                        response: "抱歉，AI服务暂时不可用，请稍后再试。",
+                        timestamp: new Date().toISOString(),
+                        provider: 'none',
+                        error: true
+                    };
+                }
             }
-
-
-
+        } 
+        // 如果Gemini未配置，尝试使用Azure
+        else if (isAzureConfigured()) {
+            try {
+                aiResponse = await processWithAzure(messages);
+                aiProvider = 'azure';
+            } catch (azureError) {
+                logger.error(`Azure OpenAI调用失败: ${azureError.message || '未知错误'}`);
+                // 返回错误消息而不是模拟响应
+                return {
+                    response: "抱歉，AI服务暂时不可用，请稍后再试。",
+                    timestamp: new Date().toISOString(),
+                    provider: 'none',
+                    error: true
+                };
+            }
+        } 
+        // 如果两个API都未配置，也返回错误消息
+        else {
+            logger.info('未配置任何AI API，返回错误消息');
             return {
-                response: aiResponse,
-                timestamp: new Date().toISOString()
-            };
-
-        } catch (azureError) {
-            logger.error('Azure OpenAI 错误:', azureError.message);
-            
-            // 如果Azure认证或API调用失败，回退到模拟响应
-            const simulatedResponse = generateSimulatedResponse(message, history);
-            const fallbackResponse = simulatedResponse + '\n\n*注意：当前使用演示模式，因为AI服务不可用*';
-            
-
-            
-            return {
-                response: fallbackResponse,
-                timestamp: new Date().toISOString()
+                response: "抱歉，AI服务尚未配置，请联系管理员。",
+                timestamp: new Date().toISOString(),
+                provider: 'none',
+                error: true
             };
         }
 
+        // 对AI回复进行基本的安全检查（移除明显的脚本攻击）
+        if (typeof aiResponse === 'string') {
+            aiResponse = aiResponse
+                .replace(/<script[\s\S]*?<\/script>/gi, '') // 移除script标签
+                .replace(/javascript:/gi, '') // 移除javascript协议
+                .replace(/on\w+\s*=/gi, ''); // 移除事件属性
+        } else {
+            aiResponse = '抱歉，出现异常，请稍后再试';
+        }
+
+        return {
+            response: aiResponse,
+            timestamp: new Date().toISOString(),
+            provider: aiProvider
+        };
     } catch (error) {
-        logger.error('AI服务错误:', error.message);
-        throw error;
+        // 记录更详细的错误信息
+        let errorMessage = `AI服务错误: ${error && error.message ? error.message : String(error)}\n`;
+        errorMessage += `错误详情: ${error && error.stack ? error.stack : JSON.stringify(error)}\n`;
+        
+        // 如果有详细错误信息，记录它
+        if (error.response) {
+            errorMessage += `API 响应错误: ${JSON.stringify(error.response.data || error.response)}`;
+        }
+        
+        logger.error(errorMessage);
+        
+        // 所有方法都失败，返回错误消息而不是模拟响应
+        return {
+            response: "抱歉，AI服务发生意外错误，请稍后再试。",
+            timestamp: new Date().toISOString(),
+            provider: 'none',
+            error: true
+        };
     }
 }
 
 module.exports = {
     processChat,
-    generateSimulatedResponse,
     isAzureConfigured,
+    isGeminiConfigured,
     sanitizeForDisplay
 };

@@ -14,9 +14,20 @@ module.exports = {
         apiVersion: "2025-01-01-preview",
         deployment: "gpt-4",
         maxTokens: 5000,
-        temperature: 1.0
+        temperature: 1.2
     },
-      // 频率限制配置
+
+    // Google Gemini API 配置
+    geminiAI: {
+        apiKey: process.env.GEMINI_API_KEY || "<REPLACE_WITH_YOUR_GEMINI_API_KEY>",
+        baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+        model: "gemini-2.5-flash-preview-05-20",
+        maxTokens: 5000,
+        temperature: 1.5,
+        enabled: true // 是否启用Gemini API
+    },
+    
+    // 频率限制配置
     rateLimit: {
         windowMs: 60 * 1000, // 1分钟（毫秒）
         maxRequests: 15, // 每分钟最大请求数，从5增加到15

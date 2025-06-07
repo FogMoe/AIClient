@@ -583,6 +583,12 @@ async function handleSubmit(e) {
             return;
         }
         
+        // 处理API服务错误情况 - 直接显示在聊天中
+        if (data.error === true) {
+            addMessage(data.response, 'assistant');
+            return;
+        }
+        
         if (!response.ok) {
             throw new Error(data.error || `HTTP error! status: ${response.status}`);
         }
