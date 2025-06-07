@@ -48,7 +48,7 @@ router.post('/login', async (req, res) => {
         if (!userId || !password) {
             return res.status(400).json({
                 success: false,
-                message: '请输入用户ID和密码'
+                message: '请输入用户ID/用户名和密码'
             });
         }
 
@@ -118,7 +118,7 @@ router.post('/login', async (req, res) => {
             loginAttempts.delete(attemptKey);
             
             // 获取完整用户信息
-            const userInfo = await getUserById(userId);
+            const userInfo = await getUserById(user.user_id);
             
             // 设置会话
             req.session.user = {
@@ -221,4 +221,4 @@ function requireAuth(req, res, next) {
     }
 }
 
-module.exports = { router, requireAuth }; 
+module.exports = { router, requireAuth };

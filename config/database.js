@@ -106,14 +106,27 @@ async function getUserById(userId) {
 }
 
 // 验证用户登录
-async function validateLogin(userId, password) {
-    const sql = `
+async function validateLogin(userIdOrName, password) {
+    // 首先尝试用户ID登录
+    let sql = `
         SELECT wp.user_id, wp.password, u.name 
         FROM web_password wp 
         JOIN user u ON wp.user_id = u.id 
         WHERE wp.user_id = ? AND wp.password = ?
     `;
-    const users = await query(sql, [userId, password]);
+    let users = await query(sql, [userIdOrName, password]);
+    
+    // 如果用户ID登录失败，尝试用户名登录
+    if (users.length === 0) {
+        sql = `
+            SELECT wp.user_id, wp.password, u.name 
+            FROM web_password wp 
+            JOIN user u ON wp.user_id = u.id 
+            WHERE u.name = ? AND wp.password = ?
+        `;
+        users = await query(sql, [userIdOrName, password]);
+    }
+    
     return users.length > 0 ? users[0] : null;
 }
 

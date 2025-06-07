@@ -303,6 +303,14 @@ function initializeBaseEventListeners() {
             closeErrorModal();
         }
     });
+    
+    // 页面重新获得焦点时重新加载聊天记录
+    window.addEventListener('focus', () => {
+        // 只有在用户已登录且聊天应用已初始化时才重新加载
+        if (currentUser && chatHistory !== undefined) {
+            reloadChatHistory();
+        }
+    });
 }
 
 // 初始化聊天相关事件监听器（在登录成功后绑定）
@@ -392,7 +400,7 @@ async function handleSubmit(e) {
         }
     }
     
-    // 格式化消息：添加时间戳和用户名
+    // 格式化消息：添加时间戳和用户名（用于后端存储）
     const now = new Date();
     const messageTime = formatTime(now.getTime());
     const userName = currentUser ? currentUser.name : '用户';
@@ -403,6 +411,8 @@ async function handleSubmit(e) {
     
     // 清空输入框并禁用
     messageInput.value = '';
+    // 重置输入框高度
+    messageInput.style.height = 'auto';
     setInputState(false);
     
     // 显示打字指示器
@@ -474,12 +484,17 @@ function handleKeyPress(e) {
             handleSubmit(e);
         }
     }
+    // Shift+Enter 允许换行，不做任何处理
 }
 
 // 处理输入变化
 function handleInput() {
     const hasText = messageInput.value.trim().length > 0;
     sendButton.style.opacity = hasText ? '1' : '0.6';
+    sendButton.disabled = !hasText;
+    
+    // 自动调整文本框高度以适应多行内容
+    autoResizeTextarea();
 }
 
 // 更新聊天列表 (已禁用)
@@ -592,12 +607,17 @@ function hideTypingIndicator() {
 // 设置输入状态
 function setInputState(enabled) {
     messageInput.disabled = !enabled;
-    sendButton.disabled = !enabled;
     
     if (enabled) {
         messageInput.placeholder = t('input.placeholder');
+        // 重新检查输入框内容来设置发送按钮状态
+        const hasText = messageInput.value.trim().length > 0;
+        sendButton.style.opacity = hasText ? '1' : '0.6';
+        sendButton.disabled = !hasText;
     } else {
         messageInput.placeholder = t('messages.thinking');
+        sendButton.disabled = true;
+        sendButton.style.opacity = '0.6';
     }
 }
 
@@ -869,9 +889,13 @@ function initializeChatApp() {
     // 初始化语言
     updateLanguage();
     
-    // 聚焦输入框
+    // 聚焦输入框并设置初始状态
     if (messageInput) {
         messageInput.focus();
+        // 设置发送按钮初始状态
+        const hasText = messageInput.value.trim().length > 0;
+        sendButton.style.opacity = hasText ? '1' : '0.6';
+        sendButton.disabled = !hasText;
     }
     
     // 检查服务器连接
@@ -953,6 +977,44 @@ async function loadChatHistory() {
     }
 }
 
+// 重新加载聊天历史记录（用于消息发送后同步）
+async function reloadChatHistory() {
+    try {
+        // 使用用户ID作为conversation_id
+        const userId = getCurrentUserId();
+        if (!userId) {
+            return;
+        }
+        
+        const response = await fetch(`/api/chat-history/${userId}`, {
+            method: 'GET',
+            credentials: 'same-origin'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && data.messages && data.messages.length > 0) {
+            // 清空当前显示的消息
+            if (chatMessages) {
+                chatMessages.innerHTML = '';
+            }
+            
+            // 更新聊天历史
+            chatHistory = data.messages;
+            
+            // 重新显示历史消息
+            displayChatHistory();
+        
+        }
+    } catch (error) {
+        // 静默处理重新加载历史记录失败
+    }
+}
+
 // 保存聊天历史记录（已废弃，现在由后端自动处理）
 async function saveChatHistory() {
     // 此函数已废弃，聊天记录现在由后端在处理消息时自动保存
@@ -966,11 +1028,31 @@ function displayChatHistory() {
         return;
     }
     
+    let lastUserTimestamp = null;
+    
     chatHistory.forEach(message => {
         if (message.role === 'user') {
-            displayMessage(message.content, 'user');
+            // 提取用户消息中的时间戳
+            let userContent = message.content;
+            let extractedTimestamp = null;
+            
+            // 匹配格式：YYYY-MM-DD HH:mm:ss @用户名 说：\n
+            const prefixPattern = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) @.+? 说：\n/;
+            const match = userContent.match(prefixPattern);
+            
+            if (match) {
+                extractedTimestamp = match[1];
+                userContent = userContent.replace(prefixPattern, '');
+                lastUserTimestamp = extractedTimestamp;
+            }
+            
+            // 如果提取到时间戳，转换为Date对象传递给displayMessage
+            const timestamp = extractedTimestamp ? new Date(extractedTimestamp).getTime() : null;
+            displayMessage(userContent, 'user', timestamp);
         } else if (message.role === 'assistant') {
-            displayMessage(message.content, 'assistant');
+            // AI回复使用与上一条用户消息相同的时间戳
+            const timestamp = lastUserTimestamp ? new Date(lastUserTimestamp).getTime() : null;
+            displayMessage(message.content, 'assistant', timestamp);
         }
     });
     
