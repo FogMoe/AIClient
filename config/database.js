@@ -1,6 +1,20 @@
 const mysql = require('mysql2/promise');
 const { logger } = require('../utils/logger');
 
+// 内存缓存
+const chatHistoryCache = new Map();
+const CACHE_DURATION = 30000; // 30秒缓存
+
+// 定期清理过期缓存（每5分钟执行一次）
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, value] of chatHistoryCache.entries()) {
+        if (now - value.timestamp > CACHE_DURATION) {
+            chatHistoryCache.delete(key);
+        }
+    }
+}, 5 * 60 * 1000);
+
 // 数据库连接配置
 const dbConfig = {
     host: process.env.DB_HOST,
@@ -38,6 +52,10 @@ async function deleteChatHistory(conversationId) {
             logger.error('无效的对话ID:', conversationId);
             throw new Error('无效的对话ID');
         }
+        
+        // 清除缓存
+        const cacheKey = `chat_${numericConversationId}`;
+        chatHistoryCache.delete(cacheKey);
 
         const sql = 'DELETE FROM chat_records WHERE conversation_id = ?';
         const [result] = await pool.execute(sql, [numericConversationId]);
@@ -76,6 +94,10 @@ async function deleteChatHistory(conversationId) {
             logger.error('无效的对话ID:', conversationId);
             throw new Error('无效的对话ID');
         }
+        
+        // 清除缓存
+        const cacheKey = `chat_${numericConversationId}`;
+        chatHistoryCache.delete(cacheKey);
 
         const sql = 'DELETE FROM chat_records WHERE conversation_id = ?';
         const [result] = await pool.execute(sql, [numericConversationId]);
@@ -140,6 +162,14 @@ async function getChatHistory(userId) {
             return null;
         }
         
+        // 检查缓存
+        const cacheKey = `chat_${conversationId}`;
+        const cached = chatHistoryCache.get(cacheKey);
+        if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+            logger.info(`从缓存获取聊天历史，conversation_id: ${conversationId}`);
+            return cached.data;
+        }
+        
         const [rows] = await pool.execute(
             'SELECT messages, timestamp FROM chat_records WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 1',
             [conversationId]
@@ -161,10 +191,19 @@ async function getChatHistory(userId) {
                  return false; // 如果msg或msg.content为空，则过滤掉此消息
              });
             
-            return {
+            const result = {
                 messages: filteredMessages,
                 timestamp: rows[0].timestamp
             };
+            
+            // 更新缓存
+            chatHistoryCache.set(cacheKey, {
+                data: result,
+                timestamp: Date.now()
+            });
+            
+            logger.info(`聊天历史记录获取成功，conversation_id: ${conversationId}, 消息数量: ${filteredMessages.length}`);
+            return result;
         }
         
         return null;
@@ -184,6 +223,10 @@ async function deleteChatHistory(conversationId) {
             logger.error('无效的对话ID:', conversationId);
             throw new Error('无效的对话ID');
         }
+        
+        // 清除缓存
+        const cacheKey = `chat_${numericConversationId}`;
+        chatHistoryCache.delete(cacheKey);
 
         const sql = 'DELETE FROM chat_records WHERE conversation_id = ?';
         const [result] = await pool.execute(sql, [numericConversationId]);
@@ -211,6 +254,10 @@ async function saveChatHistory(conversationId, newMessages) {
             logger.error('无效的对话ID:', conversationId);
             throw new Error('无效的对话ID');
         }
+        
+        // 清除缓存
+        const cacheKey = `chat_${numericConversationId}`;
+        chatHistoryCache.delete(cacheKey);
         
         // 先获取现有的完整聊天记录
         const existingHistoryRecord = await getChatHistory(numericConversationId);
@@ -273,6 +320,10 @@ async function deleteChatHistory(conversationId) {
             logger.error('无效的对话ID:', conversationId);
             throw new Error('无效的对话ID');
         }
+        
+        // 清除缓存
+        const cacheKey = `chat_${numericConversationId}`;
+        chatHistoryCache.delete(cacheKey);
 
         const sql = 'DELETE FROM chat_records WHERE conversation_id = ?';
         const [result] = await pool.execute(sql, [numericConversationId]);
