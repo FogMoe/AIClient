@@ -4,6 +4,19 @@ const { logger } = require('../utils/logger');
 // 存储每个session的请求时间戳
 const sessionRequestTimes = new Map();
 
+// 定期清理长时间不活跃的session（每小时执行一次）
+const oneHour = 60 * 60 * 1000;
+setInterval(() => {
+    const now = Date.now();
+    
+    for (const [sessionId, requestTimes] of sessionRequestTimes.entries()) {
+        const latestRequest = Math.max(...requestTimes, 0);
+        if (now - latestRequest > oneHour) {
+            sessionRequestTimes.delete(sessionId);
+        }
+    }
+}, oneHour);
+
 // 清理过期的请求记录
 function cleanupExpiredRequests(sessionId) {
     const now = Date.now();

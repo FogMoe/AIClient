@@ -1,11 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const session = require('express-session');
 const routes = require('../routes');
 const { setupConsoleOverride } = require('./logger');
+const { testConnection } = require('../config/database');
 
 function createApp() {
     const app = express();
+    
+    // 信任代理（用于获取真实IP地址）
+    app.set('trust proxy', 1);
     
     // 设置日志
     setupConsoleOverride();
@@ -17,12 +22,13 @@ function createApp() {
                 defaultSrc: ["'self'"],
                 scriptSrc: [
                     "'self'", 
-                    "'unsafe-inline'", // 允许内联脚本（用于CDN库）
                     "https://cdnjs.cloudflare.com"
+                    // 注意：移除了'unsafe-inline'以提高安全性
+                    // 如果需要内联脚本，请使用nonce或hash
                 ],
                 styleSrc: [
                     "'self'", 
-                    "'unsafe-inline'", 
+                    "'unsafe-inline'", // 样式的unsafe-inline相对安全，但建议使用nonce
                     "https://cdnjs.cloudflare.com"
                 ],
                 fontSrc: [
@@ -52,6 +58,22 @@ function createApp() {
     // 解析JSON（限制大小）
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+    
+    // 会话配置
+    app.use(session({
+        secret: process.env.SESSION_SECRET || 'fogmoe-ai-chat-secret-key-2025',
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            secure: process.env.NODE_ENV === 'production',
+            httpOnly: true,
+            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+            maxAge: 24 * 60 * 60 * 1000 // 24小时
+        }
+    }));
+    
+    // 测试数据库连接
+    testConnection();
     
     // 静态文件服务
     app.use(express.static('public'));

@@ -27,7 +27,18 @@
     <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
 </head>
 <body>
-    <div class="app-container">
+    <!-- 加载界面 -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-content">
+            <div class="loading-icon">
+                <i class="fas fa-cloud"></i>
+            </div>
+            <div class="loading-text">正在加载雾萌娘...</div>
+            <div class="loading-spinner"></div>
+        </div>
+    </div>
+
+    <div class="app-container" id="appContainer" style="display: none;">
         <!-- 侧边栏 -->
         <aside class="sidebar">
             <div class="sidebar-header">
@@ -49,6 +60,23 @@
                         <span id="currentLang">中</span>
                     </button>
                 </div>
+            </div>
+            
+            <!-- 用户信息区域 -->
+            <div class="user-info" id="userInfo" style="display: none;">
+                <div class="user-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="user-details">
+                    <div class="user-name" id="userName">用户</div>
+                    <div class="user-coins">
+                        <i class="fas fa-coins"></i>
+                        <span id="userCoins">0</span> 金币
+                    </div>
+                </div>
+                <button class="logout-btn" id="logoutBtn" title="登出">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
             </div>
             
             <div class="chat-history">
@@ -134,7 +162,7 @@
                 <p id="errorMessage"></p>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-primary" onclick="closeErrorModal()" data-i18n="modal.ok">确定</button>
+                <button class="btn btn-primary" data-i18n="modal.ok">确定</button>
             </div>
         </div>
     </div>

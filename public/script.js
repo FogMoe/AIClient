@@ -186,6 +186,16 @@ const languageToggle = document.getElementById('languageToggle');
 const currentLangSpan = document.getElementById('currentLang');
 const chatList = document.getElementById('chatList');
 
+// 用户信息相关DOM元素
+const userInfo = document.getElementById('userInfo');
+const userName = document.getElementById('userName');
+const userCoins = document.getElementById('userCoins');
+const logoutBtn = document.getElementById('logoutBtn');
+
+// 界面状态管理元素
+const loadingScreen = document.getElementById('loadingScreen');
+const appContainer = document.getElementById('appContainer');
+
 // 初始化
 let chatHistory = [];
 let currentChatId = null;
@@ -258,13 +268,54 @@ function updateWelcomeGreeting() {
     }
 }
 
-// 事件监听
-messageForm.addEventListener('submit', handleSubmit);
-messageInput.addEventListener('keypress', handleKeyPress);
-messageInput.addEventListener('input', handleInput);
-newChatBtn.addEventListener('click', startNewChat); // 恢复新建对话功能
-exportBtn.addEventListener('click', exportChatHistory); // 添加导出功能
-languageToggle.addEventListener('click', toggleLanguage);
+// 初始化基础事件监听器（在页面加载时就绑定）
+function initializeBaseEventListeners() {
+    // 模态框相关事件监听器
+    if (errorModal) {
+        // 点击模态框背景关闭
+        errorModal.addEventListener('click', (e) => {
+            if (e.target === errorModal) {
+                closeErrorModal();
+            }
+        });
+    }
+
+    // 模态框确定按钮事件监听器
+    const modalOkBtn = document.querySelector('#errorModal .btn-primary');
+    if (modalOkBtn) {
+        modalOkBtn.addEventListener('click', closeErrorModal);
+    }
+
+    // ESC键关闭模态框
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && errorModal && errorModal.style.display === 'flex') {
+            closeErrorModal();
+        }
+    });
+}
+
+// 初始化聊天相关事件监听器（在登录成功后绑定）
+function initializeChatEventListeners() {
+    if (messageForm) {
+        messageForm.addEventListener('submit', handleSubmit);
+    }
+    if (messageInput) {
+        messageInput.addEventListener('keypress', handleKeyPress);
+        messageInput.addEventListener('input', handleInput);
+    }
+    if (newChatBtn) {
+        newChatBtn.addEventListener('click', startNewChat);
+    }
+    if (exportBtn) {
+        exportBtn.addEventListener('click', exportChatHistory);
+    }
+    if (languageToggle) {
+        languageToggle.addEventListener('click', toggleLanguage);
+    }
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+}
 
 // 语言切换 (暂时禁用)
 function toggleLanguage() {
@@ -520,48 +571,30 @@ function setInputState(enabled) {
 
 // 显示错误模态框
 function showErrorModal(message) {
-    // 将换行符转换为HTML换行标签
-    errorMessage.innerHTML = message.replace(/\n/g, '<br>');
-    errorModal.style.display = 'flex';
+    if (errorMessage && errorModal) {
+        // 安全地设置文本内容，避免XSS攻击
+        errorMessage.textContent = message;
+        // 如果需要支持换行，使用CSS white-space: pre-line
+        errorMessage.style.whiteSpace = 'pre-line';
+        errorModal.style.display = 'flex';
+    }
 }
 
 
 
 // 关闭错误模态框
 function closeErrorModal() {
-    errorModal.style.display = 'none';
+    if (errorModal) {
+        errorModal.style.display = 'none';
+    }
 }
 
-// 点击模态框背景关闭
-errorModal.addEventListener('click', (e) => {
-    if (e.target === errorModal) {
-        closeErrorModal();
-    }
-});
+// 确保函数在全局作用域中可用
+window.closeErrorModal = closeErrorModal;
 
-// ESC键关闭模态框
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && errorModal.style.display === 'flex') {
-        closeErrorModal();
-    }
-});
 
-// 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', () => {
-    // 初始化语言
-    updateLanguage();
-    
-    // 聚焦输入框
-    messageInput.focus();
-    
-    // 检查服务器连接
-    checkServerConnection();
-    
-    // 初始化单一对话模式
-    currentChatId = 'single-chat';
-    chatHistory = [];
-    // 直接显示欢迎屏幕，无需新建对话功能
-});
+
+
 
 // 检查服务器连接
 async function checkServerConnection() {
@@ -665,4 +698,124 @@ window.addEventListener('online', () => {
 window.addEventListener('offline', () => {
     console.log('网络已断开');
     showErrorModal(t('messages.networkError'));
-}); 
+});
+
+// 显示应用界面
+function showApp() {
+    if (loadingScreen) {
+        loadingScreen.style.display = 'none';
+    }
+    if (appContainer) {
+        appContainer.style.display = 'flex';
+    }
+    
+    // 初始化聊天应用
+    initializeChatApp();
+}
+
+// 平滑跳转到登录页面
+function smoothRedirectToLogin() {
+    if (loadingScreen) {
+        const loadingText = loadingScreen.querySelector('.loading-text');
+        if (loadingText) {
+            loadingText.textContent = '正在跳转到登录页面...';
+        }
+    }
+    
+    setTimeout(() => {
+        window.location.href = '/auth/login';
+    }, 800);
+}
+
+// 用户信息管理
+async function loadUserInfo() {
+    try {
+        const response = await fetch('/auth/status', {
+            method: 'GET',
+            credentials: 'same-origin'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.loggedIn && data.user) {
+            // 用户已登录，显示用户信息并展示应用
+            displayUserInfo(data.user);
+            showApp();
+        } else {
+            // 用户未登录，平滑跳转到登录页面
+            smoothRedirectToLogin();
+        }
+    } catch (error) {
+        console.error('获取用户信息失败:', error);
+        // 如果获取用户信息失败，也平滑跳转到登录页面
+        smoothRedirectToLogin();
+    }
+}
+
+function displayUserInfo(user) {
+    if (userName && userCoins && userInfo) {
+        userName.textContent = user.name || '用户';
+        userCoins.textContent = user.coins || 0;
+        userInfo.style.display = 'flex';
+    }
+}
+
+// 初始化聊天应用
+function initializeChatApp() {
+    // 初始化聊天相关事件监听器
+    initializeChatEventListeners();
+    
+    // 初始化语言
+    updateLanguage();
+    
+    // 聚焦输入框
+    if (messageInput) {
+        messageInput.focus();
+    }
+    
+    // 检查服务器连接
+    checkServerConnection();
+    
+    // 初始化单一对话模式
+    currentChatId = 'single-chat';
+    chatHistory = [];
+}
+
+async function handleLogout() {
+    try {
+        const response = await fetch('/auth/logout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // 清除本地存储
+            localStorage.removeItem('sessionId');
+            // 重定向到登录页面
+            window.location.href = '/auth/login';
+        } else {
+            showErrorModal(data.message || '登出失败');
+        }
+    } catch (error) {
+        console.error('登出错误:', error);
+        showErrorModal('登出时发生错误，请稍后再试');
+    }
+}
+
+// 页面加载时检查用户登录状态
+document.addEventListener('DOMContentLoaded', () => {
+    // 首先初始化基础事件监听器（模态框等）
+    initializeBaseEventListeners();
+    
+    // 然后检查用户登录状态
+    // 其他聊天相关初始化会在登录验证成功后进行
+    loadUserInfo();
+});
