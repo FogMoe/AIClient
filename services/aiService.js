@@ -2,18 +2,36 @@ const { AzureOpenAI } = require("openai");
 const config = require('../config');
 const { logger, writeHistoryLog } = require('../utils/logger');
 
+// 安全清理函数（用于后端）
+function sanitizeForDisplay(text) {
+    if (typeof text !== 'string') {
+        return '';
+    }
+    // 移除潜在的HTML标签和脚本
+    return text
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;')
+        .replace(/\//g, '&#x2F;');
+}
+
 // 模拟AI响应函数
 function generateSimulatedResponse(message, history = []) {
+    // 清理输入以防止注入
+    const safeMessage = sanitizeForDisplay(message);
+    
     // 如果有对话历史，尝试生成更有上下文的回复
     if (history.length > 0) {
         const lastUserMessage = history.filter(msg => msg.role === 'user').pop();
-        if (lastUserMessage) {
+        if (lastUserMessage && lastUserMessage.content) {
+            const safeLastMessage = sanitizeForDisplay(lastUserMessage.content);
             const contextResponses = [
-                `我记得您之前提到了"${lastUserMessage.content}"，现在您又说"${message}"。让我结合这些信息来回答您。`,
-                `基于我们之前的对话，特别是您提到的"${lastUserMessage.content}"，我认为"${message}"是一个很好的延续。`,
-                `我注意到您在继续我们之前关于"${lastUserMessage.content}"的讨论。关于"${message}"，我有以下想法...`,
-                `结合您之前的问题和现在的"${message}"，我觉得我们的对话很有深度。`,
-                `从您之前的"${lastUserMessage.content}"到现在的"${message}"，我看到了思路的发展。`
+                `我记得您之前提到了"${safeLastMessage}"，现在您又说"${safeMessage}"。让我结合这些信息来回答您。`,
+                `基于我们之前的对话，特别是您提到的"${safeLastMessage}"，我认为"${safeMessage}"是一个很好的延续。`,
+                `我注意到您在继续我们之前关于"${safeLastMessage}"的讨论。关于"${safeMessage}"，我有以下想法...`,
+                `结合您之前的问题和现在的"${safeMessage}"，我觉得我们的对话很有深度。`,
+                `从您之前的"${safeLastMessage}"到现在的"${safeMessage}"，我看到了思路的发展。`
             ];
             return contextResponses[Math.floor(Math.random() * contextResponses.length)];
         }
@@ -21,11 +39,11 @@ function generateSimulatedResponse(message, history = []) {
     
     // 默认响应（没有历史记录时）
     const responses = [
-        `您好！我收到了您的消息："${message}"。我是一个AI助手，目前在演示模式下运行。`,
-        `这是一个很有趣的问题。关于"${message}"，我认为这需要仔细考虑。`,
-        `感谢您的提问："${message}"。我正在处理您的请求...`,
-        `您提到了"${message}"，这让我想到了很多相关的话题。`,
-        `我理解您说的"${message}"。让我为您提供一些有用的信息。`
+        `您好！我收到了您的消息："${safeMessage}"。我是一个AI助手，目前在演示模式下运行。`,
+        `这是一个很有趣的问题。关于"${safeMessage}"，我认为这需要仔细考虑。`,
+        `感谢您的提问："${safeMessage}"。我正在处理您的请求...`,
+        `您提到了"${safeMessage}"，这让我想到了很多相关的话题。`,
+        `我理解您说的"${safeMessage}"。让我为您提供一些有用的信息。`
     ];
     
     return responses[Math.floor(Math.random() * responses.length)];
@@ -85,7 +103,17 @@ async function processChat(message, history, sessionId) {
                 temperature: config.azureOpenAI.temperature,
             });
 
-            const aiResponse = result.choices[0].message.content;
+            let aiResponse = result.choices[0].message.content;
+
+            // 对AI回复进行基本的安全检查（移除明显的脚本攻击）
+            if (typeof aiResponse === 'string') {
+                aiResponse = aiResponse
+                    .replace(/<script[\s\S]*?<\/script>/gi, '') // 移除script标签
+                    .replace(/javascript:/gi, '') // 移除javascript协议
+                    .replace(/on\w+\s*=/gi, ''); // 移除事件属性
+            } else {
+                aiResponse = '抱歉，出现异常，请稍后再试';
+            }
 
             // 写入对话历史日志
             const fullHistory = [...history, { role: "assistant", content: aiResponse }];
@@ -122,5 +150,6 @@ async function processChat(message, history, sessionId) {
 module.exports = {
     processChat,
     generateSimulatedResponse,
-    isAzureConfigured
+    isAzureConfigured,
+    sanitizeForDisplay
 }; 

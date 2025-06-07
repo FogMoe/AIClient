@@ -117,40 +117,43 @@ async function copyMessage(text, button) {
     }
 }
 
-// 安全的HTML清理函数
+// 安全的HTML清理函数 - 使用DOMPurify
 function sanitizeHtml(html) {
-    // 创建一个临时div来清理HTML
-    const temp = document.createElement('div');
-    temp.innerHTML = html;
-    
-    // 移除危险的脚本标签
-    const scripts = temp.querySelectorAll('script');
-    scripts.forEach(script => script.remove());
-    
-    // 移除危险的事件属性
-    const elements = temp.querySelectorAll('*');
-    elements.forEach(el => {
-        // 移除所有以 on 开头的事件属性
-        Array.from(el.attributes).forEach(attr => {
-            if (attr.name.startsWith('on')) {
-                el.removeAttribute(attr.name);
+    if (typeof DOMPurify !== 'undefined') {
+        // 使用DOMPurify进行专业的HTML清理
+        return DOMPurify.sanitize(html, {
+            // 允许的标签
+            ALLOWED_TAGS: [
+                'p', 'br', 'strong', 'em', 'u', 'strike', 'code', 'pre',
+                'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                'ul', 'ol', 'li',
+                'blockquote', 'hr',
+                'a', 'img',
+                'table', 'thead', 'tbody', 'tr', 'th', 'td'
+            ],
+            // 允许的属性
+            ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'class'],
+            // 为外部链接添加安全属性
+            ADD_ATTR: ['target', 'rel'],
+            // 禁止危险的协议
+            ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+            // 添加安全的rel属性
+            HOOK_AFTER_SANITIZE: function(currentNode) {
+                if (currentNode.tagName === 'A' && currentNode.hasAttribute('href')) {
+                    const href = currentNode.getAttribute('href');
+                    if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+                        currentNode.setAttribute('target', '_blank');
+                        currentNode.setAttribute('rel', 'noopener noreferrer');
+                    }
+                }
             }
         });
-        
-        // 清理 href 属性，只允许 http/https/mailto 链接
-        if (el.hasAttribute('href')) {
-            const href = el.getAttribute('href');
-            if (!href.match(/^(https?:\/\/|mailto:)/i)) {
-                el.removeAttribute('href');
-            } else {
-                // 为外部链接添加安全属性
-                el.setAttribute('target', '_blank');
-                el.setAttribute('rel', 'noopener noreferrer');
-            }
-        }
-    });
-    
-    return temp.innerHTML;
+    } else {
+        // 降级方案：基本的文本转义
+        const div = document.createElement('div');
+        div.textContent = html;
+        return div.innerHTML;
+    }
 }
 
 // Markdown 渲染函数
@@ -337,8 +340,9 @@ async function handleSubmit(e) {
         
         // 特殊处理频率限制错误
         if (response.status === 429 && data.rateLimitExceeded) {
-            // 像AI回复一样显示频率限制消息
-            addMessage(data.error, 'assistant');
+            // 像AI回复一样显示频率限制消息（需要清理）
+            const sanitizedError = typeof data.error === 'string' ? data.error : '服务器繁忙，请稍后再试';
+            addMessage(sanitizedError, 'assistant');
             return;
         }
         
@@ -391,6 +395,9 @@ function updateChatList() {
 
 // 添加消息到聊天窗口
 function addMessage(text, type, timestamp = null) {
+    // 对于所有消息进行基本的安全清理
+    const safeText = typeof text === 'string' ? text : '';
+    
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}`;
     
@@ -408,7 +415,8 @@ function addMessage(text, type, timestamp = null) {
     
     const textDiv = document.createElement('div');
     textDiv.className = 'message-text';
-    textDiv.innerHTML = renderMarkdown(text);
+    // 渲染Markdown并清理HTML
+    textDiv.innerHTML = renderMarkdown(safeText);
     
     const timeDiv = document.createElement('div');
     timeDiv.className = 'message-time';
@@ -423,7 +431,9 @@ function addMessage(text, type, timestamp = null) {
         copyBtn.className = 'copy-btn';
         copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
         copyBtn.title = '复制消息';
-        copyBtn.addEventListener('click', () => copyMessage(text, copyBtn));
+        // 复制原始的markdown文本（但要确保安全）
+        const copyText = safeText.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/javascript:/gi, '');
+        copyBtn.addEventListener('click', () => copyMessage(copyText, copyBtn));
         
         contentDiv.appendChild(copyBtn);
     }
@@ -441,9 +451,9 @@ function addMessage(text, type, timestamp = null) {
         });
     }
     
-    // 添加到聊天历史
+    // 添加到聊天历史（保存清理后的文本）
     chatHistory.push({
-        text: text,
+        text: safeText,
         type: type,
         timestamp: timestamp || new Date().toISOString()
     });
