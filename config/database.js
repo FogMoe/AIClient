@@ -206,27 +206,43 @@ async function saveChatHistory(conversationId, newMessages) {
         // 将新消息追加到现有历史记录中
         const allMessages = [...existingHistory, ...newMessages];
         
+        // 计算所有消息的总字符数
+        const totalCharacters = allMessages.reduce((total, message) => {
+            return total + (message.content ? message.content.length : 0);
+        }, 0);
+        
+        // 如果总字符数超过800000，清空历史记录，只保留新消息
+        let messagesToSave = allMessages;
+        if (totalCharacters > 800000) {
+            logger.warn(`用户 ${numericConversationId} 的聊天记录超过800000字符(${totalCharacters}字符)，自动清空历史记录`);
+            messagesToSave = newMessages; // 只保留当前新消息
+            
+            // 先删除现有记录
+            await deleteChatHistory(numericConversationId);
+        }
+        
         // 检查是否存在记录
         const checkSql = 'SELECT id FROM chat_records WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 1';
         const existingRecords = await query(checkSql, [numericConversationId]);
         
-        if (existingRecords.length > 0) {
-            // 更新现有记录
+        if (existingRecords.length > 0 && totalCharacters <= 800000) {
+            // 更新现有记录（仅当未超过字符限制时）
             const updateSql = `
                 UPDATE chat_records 
                 SET messages = ?, timestamp = CURRENT_TIMESTAMP 
                 WHERE id = ?
             `;
-            await query(updateSql, [JSON.stringify(allMessages), existingRecords[0].id]);
-            logger.info(`聊天记录已更新，conversation_id: ${numericConversationId}, 总消息数量: ${allMessages.length}`);
+            await query(updateSql, [JSON.stringify(messagesToSave), existingRecords[0].id]);
+            logger.info(`聊天记录已更新，conversation_id: ${numericConversationId}, 总消息数量: ${messagesToSave.length}, 总字符数: ${totalCharacters}`);
         } else {
-            // 插入新记录
+            // 插入新记录（新用户或已清空历史记录）
             const insertSql = `
                 INSERT INTO chat_records (conversation_id, messages) 
                 VALUES (?, ?)
             `;
-            await query(insertSql, [numericConversationId, JSON.stringify(allMessages)]);
-            logger.info(`聊天记录已创建，conversation_id: ${numericConversationId}, 总消息数量: ${allMessages.length}`);
+            await query(insertSql, [numericConversationId, JSON.stringify(messagesToSave)]);
+            const newTotalChars = messagesToSave.reduce((total, message) => total + (message.content ? message.content.length : 0), 0);
+            logger.info(`聊天记录已创建，conversation_id: ${numericConversationId}, 总消息数量: ${messagesToSave.length}, 总字符数: ${newTotalChars}`);
         }
     } catch (error) {
         logger.error('保存聊天记录失败:', error);

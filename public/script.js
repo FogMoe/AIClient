@@ -11,6 +11,8 @@ const translations = {
         'input.hint': 'AI生成内容仅供参考，请自行甄别其准确性。',
         'modal.title': '提示',
         'modal.ok': '确定',
+        'modal.cancel': '取消',
+        'modal.confirm': '确认',
         'messages.thinking': '雾萌娘正在思考中...',
         'messages.error': '抱歉，AI服务暂时不可用，请稍后再试',
         'messages.networkError': '网络连接已断开，请检查您的网络设置',
@@ -19,7 +21,7 @@ const translations = {
         'time.justNow': '刚刚',
         'time.minutesAgo': '{0}分钟前',
         'time.hoursAgo': '{0}小时前',
-        'confirm.clearHistory': '新建对话会清空当前聊天记录，确定要继续吗？',
+        'confirm.clearHistory': '确定要清空当前聊天记录吗？',
         'error.clearHistoryFailed': '清除聊天记录失败。',
         'error.clearHistoryNetwork': '清除聊天记录时发生网络错误。'
     },
@@ -34,6 +36,8 @@ const translations = {
         'input.hint': 'FOGMOE uses AI, which may not always be accurate. Conversations may not accurately represent reality.',
         'modal.title': 'Notice',
         'modal.ok': 'OK',
+        'modal.cancel': 'Cancel',
+        'modal.confirm': 'Confirm',
         'messages.thinking': 'AI is thinking...',
         'messages.error': 'Sorry, AI service is temporarily unavailable. Please try again later.',
         'messages.networkError': 'Network connection lost. Please check your network settings.',
@@ -42,7 +46,7 @@ const translations = {
         'time.justNow': 'Just now',
         'time.minutesAgo': '{0} minutes ago',
         'time.hoursAgo': '{0} hours ago',
-        'confirm.clearHistory': 'Starting a new chat will clear the current chat history. Are you sure you want to continue?',
+        'confirm.clearHistory': 'Are you sure you want to clear the current chat history?',
         'error.clearHistoryFailed': 'Failed to clear chat history from the server, but local history has been cleared.',
         'error.clearHistoryNetwork': 'A network error occurred while clearing chat history.'
     }
@@ -336,39 +340,40 @@ function toggleLanguage() {
 
 // 新建对话
 async function startNewChat() {
-    // 弹出确认对话框
-    const confirmClear = confirm(t('confirm.clearHistory', '新建对话会清空当前聊天记录，确定要继续吗？'));
-
-    if (confirmClear) {
-        // 如果用户已登录，则尝试从后端删除聊天记录
-        if (currentUser) {
-            try {
-                const userId = getCurrentUserId();
-                if (userId) {
-                    const response = await fetch(`/api/chat-history/${userId}`, {
-                        method: 'DELETE',
-                    });
-                    if (!response.ok) {
-                        const errorData = await response.json();
-                        console.error('Failed to delete chat history from server:', errorData.message);
-                        // 即使后端删除失败，也继续清空前端，或给出提示
-                        showErrorModal(t('error.clearHistoryFailed', '从服务器清除聊天记录失败，但本地记录已清除。'));
+    // 使用自定义确认模态框
+    showConfirmModal(
+        t('confirm.clearHistory', '确定要清空当前聊天记录吗？'),
+        async () => {
+            // 如果用户已登录，则尝试从后端删除聊天记录
+            if (currentUser) {
+                try {
+                    const userId = getCurrentUserId();
+                    if (userId) {
+                        const response = await fetch(`/api/chat-history/${userId}`, {
+                            method: 'DELETE',
+                        });
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            console.error('Failed to delete chat history from server:', errorData.message);
+                            // 即使后端删除失败，也继续清空前端，或给出提示
+                            showErrorModal(t('error.clearHistoryFailed', '清除聊天记录失败。'));
+                        }
                     }
+                } catch (error) {
+                    console.error('Error deleting chat history from server:', error);
+                    showErrorModal(t('error.clearHistoryNetwork', '清除聊天记录时发生网络错误。'));
                 }
-            } catch (error) {
-                console.error('Error deleting chat history from server:', error);
-                showErrorModal(t('error.clearHistoryNetwork', '清除聊天记录时发生网络错误。'));
             }
-        }
 
-        // 清空前端聊天记录和界面
-        currentChatId = Date.now().toString(); // 为新对话生成新的ID
-        chatHistory = [];
-        chatMessages.innerHTML = '';
-        chatMessages.style.display = 'none';
-        welcomeScreen.style.display = 'flex';
-        updateChatList(); // 更新侧边栏的聊天列表（如果适用）
-    }
+            // 清空前端聊天记录和界面
+            currentChatId = Date.now().toString(); // 为新对话生成新的ID
+            chatHistory = [];
+            chatMessages.innerHTML = '';
+            chatMessages.style.display = 'none';
+            welcomeScreen.style.display = 'flex';
+            updateChatList(); // 更新侧边栏的聊天列表（如果适用）
+        }
+    );
 }
 
 // 处理表单提交
@@ -614,8 +619,74 @@ function closeErrorModal() {
     }
 }
 
+// 显示确认模态框
+function showConfirmModal(message, onConfirm, onCancel = null) {
+    // 创建确认模态框HTML
+    const confirmModalHTML = `
+        <div class="modal" id="confirmModal" style="display: flex;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <i class="fas fa-question-circle"></i>
+                    <h3>${t('modal.confirm', '确认')}</h3>
+                </div>
+                <div class="modal-body">
+                    <p id="confirmMessage">${message}</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="confirmCancelBtn">${t('modal.cancel', '取消')}</button>
+                    <button class="btn btn-primary" id="confirmOkBtn">${t('modal.ok', '确定')}</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // 移除已存在的确认模态框
+    const existingModal = document.getElementById('confirmModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // 添加新的确认模态框到页面
+    document.body.insertAdjacentHTML('beforeend', confirmModalHTML);
+    
+    const confirmModal = document.getElementById('confirmModal');
+    const confirmOkBtn = document.getElementById('confirmOkBtn');
+    const confirmCancelBtn = document.getElementById('confirmCancelBtn');
+    
+    // 确定按钮事件
+    confirmOkBtn.addEventListener('click', () => {
+        confirmModal.remove();
+        if (onConfirm) onConfirm();
+    });
+    
+    // 取消按钮事件
+    confirmCancelBtn.addEventListener('click', () => {
+        confirmModal.remove();
+        if (onCancel) onCancel();
+    });
+    
+    // 点击背景关闭
+    confirmModal.addEventListener('click', (e) => {
+        if (e.target === confirmModal) {
+            confirmModal.remove();
+            if (onCancel) onCancel();
+        }
+    });
+    
+    // ESC键关闭
+    const handleEscape = (e) => {
+        if (e.key === 'Escape') {
+            confirmModal.remove();
+            if (onCancel) onCancel();
+            document.removeEventListener('keydown', handleEscape);
+        }
+    };
+    document.addEventListener('keydown', handleEscape);
+}
+
 // 确保函数在全局作用域中可用
 window.closeErrorModal = closeErrorModal;
+window.showConfirmModal = showConfirmModal;
 
 // 检查服务器连接
 async function checkServerConnection() {

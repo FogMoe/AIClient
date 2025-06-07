@@ -887,11 +887,7 @@ body {
     line-height: 1.5;
 }
 
-.modal-footer {
-    padding: 20px;
-    text-align: right;
-    background: #f9fafb;
-}
+
 
 .btn {
     padding: 8px 16px;
@@ -910,6 +906,25 @@ body {
 
 .btn-primary:hover {
     background: #5a67d8;
+}
+
+.btn-secondary {
+    background: #e5e7eb;
+    color: #374151;
+    margin-right: 8px;
+}
+
+.btn-secondary:hover {
+    background: #d1d5db;
+}
+
+.modal-footer {
+    padding: 20px;
+    text-align: right;
+    background: #f9fafb;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
 }
 
 /* 响应式设计 */
@@ -1045,4 +1060,4 @@ body {
     align-items: flex-end;
     background: transparent;
     position: relative;
-} 
+}
