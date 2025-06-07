@@ -308,7 +308,26 @@ function initializeBaseEventListeners() {
     window.addEventListener('focus', () => {
         // 只有在用户已登录且聊天应用已初始化时才重新加载
         if (currentUser && chatHistory !== undefined) {
-            reloadChatHistory();
+            // 记录当前滚动位置
+            const currentScrollTop = chatMessages ? chatMessages.scrollTop : 0;
+            const currentScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
+            const currentClientHeight = chatMessages ? chatMessages.clientHeight : 0;
+            
+            // 计算滚动位置比例（从底部开始计算）
+            const scrollFromBottom = currentScrollHeight - currentScrollTop - currentClientHeight;
+            
+            reloadChatHistory().then(() => {
+                // 重新加载后恢复滚动位置
+                if (chatMessages && scrollFromBottom >= 0) {
+                    // 使用setTimeout确保DOM已更新
+                    setTimeout(() => {
+                        const newScrollHeight = chatMessages.scrollHeight;
+                        const newClientHeight = chatMessages.clientHeight;
+                        const newScrollTop = newScrollHeight - newClientHeight - scrollFromBottom;
+                        chatMessages.scrollTop = Math.max(0, newScrollTop);
+                    }, 10);
+                }
+            });
         }
     });
 }
@@ -966,8 +985,8 @@ async function loadChatHistory() {
                 chatMessages.style.display = 'flex';
             }
             
-            // 显示历史消息
-            displayChatHistory();
+            // 显示历史消息（初次加载时滚动到底部）
+            displayChatHistory(false);
             
             console.log('聊天历史记录加载成功');
         }
@@ -978,7 +997,7 @@ async function loadChatHistory() {
 }
 
 // 重新加载聊天历史记录（用于消息发送后同步）
-async function reloadChatHistory() {
+async function reloadChatHistory(preserveScrollPosition = false) {
     try {
         // 使用用户ID作为conversation_id
         const userId = getCurrentUserId();
@@ -1006,8 +1025,8 @@ async function reloadChatHistory() {
             // 更新聊天历史
             chatHistory = data.messages;
             
-            // 重新显示历史消息
-            displayChatHistory();
+            // 重新显示历史消息，传递是否保持滚动位置的参数
+            displayChatHistory(preserveScrollPosition);
         
         }
     } catch (error) {
@@ -1023,7 +1042,7 @@ async function saveChatHistory() {
 }
 
 // 显示聊天历史记录
-function displayChatHistory() {
+function displayChatHistory(preserveScrollPosition = false) {
     if (!chatHistory || chatHistory.length === 0) {
         return;
     }
@@ -1056,8 +1075,10 @@ function displayChatHistory() {
         }
     });
     
-    // 滚动到底部
-    scrollToBottom();
+    // 只有在不需要保持滚动位置时才滚动到底部
+    if (!preserveScrollPosition) {
+        scrollToBottom();
+    }
 }
 
 // 仅显示消息，不添加到chatHistory数组
