@@ -286,6 +286,7 @@
     </div>
 
     <script>
+        // 检查DOM元素是否存在
         const loginForm = document.getElementById('loginForm');
         const messageContainer = document.getElementById('messageContainer');
         const loginBtn = document.getElementById('loginBtn');
@@ -294,13 +295,23 @@
 
         let messageTimeout = null;
 
-        function showMessage(message, type = 'error') {
+        function showMessage(message, type = 'error') {            
+            // 检查元素是否存在
+            if (!messageContainer) {
+                return;
+            }
+            
             // 清除之前的定时器
             if (messageTimeout) {
                 clearTimeout(messageTimeout);
             }
             
-            messageContainer.innerHTML = `<div class="${type}-message">${message}</div>`;
+            // 创建错误消息元素
+            messageContainer.innerHTML = '';
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `${type}-message`;
+            messageDiv.textContent = message;
+            messageContainer.appendChild(messageDiv);
             
             // 只有成功消息才自动消失，错误消息保持显示
             if (type === 'success') {
@@ -329,7 +340,9 @@
             }
         }
 
-        loginForm.addEventListener('submit', async (e) => {
+        // 确保loginForm存在再绑定事件
+        if (loginForm) {
+            loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             // 清除之前的错误消息
@@ -365,16 +378,18 @@
                     showMessage(data.message || '登录失败');
                 }
             } catch (error) {
-                console.error('登录错误:', error);
                 showMessage('网络错误，请稍后再试');
             } finally {
                 setLoading(false);
             }
-        });
-
-        // 在用户输入时清除错误消息
-        document.getElementById('userId').addEventListener('input', clearMessage);
-        document.getElementById('password').addEventListener('input', clearMessage);
+            });
+            
+            // 在用户输入时清除错误消息
+            const userIdInput = document.getElementById('userId');
+            const passwordInput = document.getElementById('password');
+            if (userIdInput) userIdInput.addEventListener('input', clearMessage);
+            if (passwordInput) passwordInput.addEventListener('input', clearMessage);
+        }
 
         // 检查是否已登录
         fetch('/auth/status')
@@ -384,7 +399,9 @@
                     window.location.href = '/';
                 }
             })
-            .catch(console.error);
+            .catch(() => {
+                // 静默处理错误
+            });
     </script>
 </body>
 </html> 

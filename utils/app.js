@@ -3,7 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const session = require('express-session');
 const routes = require('../routes');
-const { setupConsoleOverride } = require('./logger');
+const { setupConsoleOverride, logger } = require('./logger');
 const { testConnection } = require('../config/database');
 
 function createApp() {
@@ -22,13 +22,12 @@ function createApp() {
                 defaultSrc: ["'self'"],
                 scriptSrc: [
                     "'self'", 
+                    "'unsafe-inline'",
                     "https://cdnjs.cloudflare.com"
-                    // 注意：移除了'unsafe-inline'以提高安全性
-                    // 如果需要内联脚本，请使用nonce或hash
                 ],
                 styleSrc: [
                     "'self'", 
-                    "'unsafe-inline'", // 样式的unsafe-inline相对安全，但建议使用nonce
+                    "'unsafe-inline'",
                     "https://cdnjs.cloudflare.com"
                 ],
                 fontSrc: [
@@ -91,7 +90,7 @@ function createApp() {
     
     // 错误处理中间件
     app.use((error, req, res, next) => {
-        console.error('服务器错误:', error);
+        logger.error('服务器错误:', error);
         res.status(500).json({
             error: '服务器内部错误',
             timestamp: new Date().toISOString()

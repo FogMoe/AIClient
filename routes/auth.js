@@ -40,27 +40,8 @@ router.post('/login', async (req, res) => {
     try {
         const { userId, password } = req.body;
         const clientIP = req.ip || req.connection.remoteAddress;
-        const attemptKey = `${clientIP}:${userId}`;
 
-        // 检查暴力破解防护
-        const attempts = loginAttempts.get(attemptKey);
-        if (attempts && attempts.count >= 5) {
-            const timeSinceLastAttempt = Date.now() - attempts.lastAttempt;
-            const fifteenMinutes = 15 * 60 * 1000;
-            
-            if (timeSinceLastAttempt < fifteenMinutes) {
-                const remainingTime = Math.ceil((fifteenMinutes - timeSinceLastAttempt) / 1000 / 60);
-                return res.status(429).json({
-                    success: false,
-                    message: `登录尝试过于频繁，请${remainingTime}分钟后再试`
-                });
-            } else {
-                // 重置计数器
-                loginAttempts.delete(attemptKey);
-            }
-        }
-
-        // 验证输入
+        // 验证输入（先进行基本验证）
         if (!userId || !password) {
             return res.status(400).json({
                 success: false,
@@ -91,6 +72,27 @@ router.post('/login', async (req, res) => {
             });
         }
 
+        // 现在userId已经验证过了，可以安全使用
+        const attemptKey = `${clientIP}:${userId}`;
+
+        // 检查暴力破解防护
+        const attempts = loginAttempts.get(attemptKey);
+        if (attempts && attempts.count >= 5) {
+            const timeSinceLastAttempt = Date.now() - attempts.lastAttempt;
+            const fifteenMinutes = 15 * 60 * 1000;
+            
+            if (timeSinceLastAttempt < fifteenMinutes) {
+                const remainingTime = Math.ceil((fifteenMinutes - timeSinceLastAttempt) / 1000 / 60);
+                return res.status(429).json({
+                    success: false,
+                    message: `登录尝试过于频繁，请${remainingTime}分钟后再试`
+                });
+            } else {
+                // 重置计数器
+                loginAttempts.delete(attemptKey);
+            }
+        }
+
         // 对密码进行SHA256加密
         const hashedPassword = hashPassword(password);
         
@@ -112,7 +114,10 @@ router.post('/login', async (req, res) => {
                 permission: userInfo.permission
             };
 
-            logger.info(`用户登录成功: ${userInfo.name} (ID: ${userId}) from IP: ${clientIP}`);
+            // 只在开发环境记录详细登录信息
+            if (process.env.NODE_ENV === 'development') {
+                logger.info(`用户登录成功: ${userInfo.name} (ID: ${userId}) from IP: ${clientIP}`);
+            }
             
             res.json({
                 success: true,
@@ -130,6 +135,7 @@ router.post('/login', async (req, res) => {
             currentAttempts.lastAttempt = Date.now();
             loginAttempts.set(attemptKey, currentAttempts);
             
+            // 记录安全相关的失败日志（保留用于安全监控）
             logger.warn(`登录失败: 用户ID ${userId} from IP: ${clientIP} (尝试次数: ${currentAttempts.count})`);
             res.status(401).json({
                 success: false,
@@ -157,7 +163,10 @@ router.post('/logout', (req, res) => {
                     message: '登出失败'
                 });
             }
-            logger.info(`用户登出: ${userName}`);
+            // 只在开发环境记录详细登出信息
+            if (process.env.NODE_ENV === 'development') {
+                logger.info(`用户登出: ${userName}`);
+            }
             res.json({
                 success: true,
                 message: '已成功登出'

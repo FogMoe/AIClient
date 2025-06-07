@@ -99,7 +99,7 @@ async function copyMessage(text, button) {
         }, 2000);
         
     } catch (error) {
-        console.error('复制失败:', error);
+        // 静默处理复制失败
         
         // 显示复制失败的反馈
         const originalIcon = button.innerHTML;
@@ -166,7 +166,7 @@ function renderMarkdown(text) {
         const rendered = marked.parse(text);
         return sanitizeHtml(rendered);
     } catch (error) {
-        console.error('Markdown 解析错误:', error);
+        // 静默处理Markdown解析错误
         return text.replace(/\n/g, '<br>');
     }
 }
@@ -412,7 +412,7 @@ async function handleSubmit(e) {
         updateChatList();
         
     } catch (error) {
-        console.error('发送消息时出错:', error);
+        // 静默处理发送消息错误
         hideTypingIndicator();
         showErrorModal(error.message || t('messages.error'));
     } finally {
@@ -580,8 +580,6 @@ function showErrorModal(message) {
     }
 }
 
-
-
 // 关闭错误模态框
 function closeErrorModal() {
     if (errorModal) {
@@ -591,10 +589,6 @@ function closeErrorModal() {
 
 // 确保函数在全局作用域中可用
 window.closeErrorModal = closeErrorModal;
-
-
-
-
 
 // 检查服务器连接
 async function checkServerConnection() {
@@ -607,11 +601,9 @@ async function checkServerConnection() {
             body: JSON.stringify({ message: 'ping' })
         });
         
-        if (response.ok) {
-            console.log('服务器连接正常');
-        }
+        // 静默处理服务器连接正常情况
     } catch (error) {
-        console.warn('服务器连接检查失败:', error);
+        // 静默处理服务器连接错误
         showErrorModal(t('messages.serverError'));
     }
 }
@@ -682,21 +674,21 @@ function exportChatHistory() {
         // 清理URL对象
         window.URL.revokeObjectURL(url);
         
-        console.log('聊天记录导出成功');
+        // 导出成功后静默处理
         
     } catch (error) {
-        console.error('导出聊天记录失败:', error);
+        // 静默处理导出错误
         showErrorModal('导出聊天记录时发生错误，请稍后再试。');
     }
 }
 
 // 网络状态监听
 window.addEventListener('online', () => {
-    console.log('网络已连接');
+    // 静默处理网络恢复连接
 });
 
 window.addEventListener('offline', () => {
-    console.log('网络已断开');
+    // 静默处理网络断开
     showErrorModal(t('messages.networkError'));
 });
 
@@ -750,7 +742,7 @@ async function loadUserInfo() {
             smoothRedirectToLogin();
         }
     } catch (error) {
-        console.error('获取用户信息失败:', error);
+        // 静默处理获取用户信息失败
         // 如果获取用户信息失败，也平滑跳转到登录页面
         smoothRedirectToLogin();
     }
@@ -805,7 +797,7 @@ async function handleLogout() {
             showErrorModal(data.message || '登出失败');
         }
     } catch (error) {
-        console.error('登出错误:', error);
+        // 静默处理登出错误
         showErrorModal('登出时发生错误，请稍后再试');
     }
 }
