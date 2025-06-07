@@ -56,7 +56,7 @@ function isAzureConfigured() {
 }
 
 // 处理AI聊天请求
-async function processChat(message, history, sessionId) {
+async function processChat(message, history, sessionId, userCoins) {
     try {
         // 特殊处理ping请求
         if (message === 'ping') {
@@ -89,9 +89,15 @@ async function processChat(message, history, sessionId) {
                 deployment: config.azureOpenAI.deployment
             });
 
+            // 获取系统提示词，并添加用户硬币数量信息
+            const systemMessage = config.assistant.getSystemMessage();
+            const systemMessageWithCoins = userCoins !== undefined 
+                ? `${systemMessage}\n用户硬币数量: ${userCoins}`
+                : systemMessage;
+
             // 构建完整的对话消息数组
             const messages = [
-                { role: "system", content: config.assistant.getSystemMessage() },
+                { role: "system", content: systemMessageWithCoins },
                 ...history,
                 { role: "user", content: message }
             ];

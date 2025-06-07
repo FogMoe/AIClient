@@ -23,12 +23,43 @@ const dbConfig = {
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+    connectionLimit: 20,         // 从10增加到20
+    queueLimit: 0,
+    connectTimeout: 15000,       // 添加连接超时时间：15秒
+    acquireTimeout: 15000,       // 添加获取连接超时时间：15秒
+    timeout: 20000               // 添加查询超时时间：20秒
 };
 
 // 创建连接池
-const pool = mysql.createPool(dbConfig);
+let pool = mysql.createPool(dbConfig);
+
+// 监听错误事件
+pool.on('error', (err) => {
+    logger.error('数据库连接池错误:', err.message || err);
+    logger.error('错误详情:', err.stack || JSON.stringify(err));
+    logger.error('错误类型:', err.name || '未知错误类型');
+    logger.error('错误代码:', err.code || '无错误代码');
+});
+
+// 连接池健康检查（每5分钟）
+setInterval(async () => {
+    try {
+        await pool.query('SELECT 1');
+        logger.info('数据库连接池健康检查通过');
+    } catch (error) {
+        logger.error('数据库连接池健康检查失败:', error.message || error);
+        logger.error('尝试重新创建连接池');
+        try {
+            // 释放旧连接池资源（如果可能）
+            await pool.end().catch(() => {});
+            // 重新创建连接池
+            pool = mysql.createPool(dbConfig);
+            logger.info('数据库连接池已重新创建');
+        } catch (recreateError) {
+            logger.error('重新创建连接池失败:', recreateError.message || recreateError);
+        }
+    }
+}, 5 * 60 * 1000);
 
 // 测试数据库连接
 async function testConnection() {
@@ -74,13 +105,45 @@ async function deleteChatHistory(conversationId) {
     }
 }
 
+// 带重试的查询执行
+async function queryWithRetry(sql, params = [], maxRetries = 3) {
+    let lastError;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            const [rows] = await pool.execute(sql, params);
+            if (attempt > 1) {
+                logger.info(`查询在第${attempt}次尝试成功`);
+            }
+            return rows;
+        } catch (error) {
+            lastError = error;
+            // 如果是超时或连接错误，尝试重试
+            if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+                logger.warn(`查询失败(${error.code})，正在进行第${attempt}/${maxRetries}次重试:`, error.message);
+                // 延迟重试，避免立即重试造成连接风暴
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            } else {
+                // 非网络错误直接抛出
+                throw error;
+            }
+        }
+    }
+    // 所有重试都失败
+    logger.error(`查询失败，已重试${maxRetries}次:`, lastError.message || lastError);
+    throw lastError;
+}
+
 // 执行查询
 async function query(sql, params = []) {
     try {
-        const [rows] = await pool.execute(sql, params);
-        return rows;
+        return await queryWithRetry(sql, params, 3);
     } catch (error) {
-        logger.error('数据库查询错误:', error.message);
+        logger.error('数据库查询错误:', error.message || error);
+        logger.error('查询SQL:', sql);
+        logger.error('查询参数:', JSON.stringify(params));
+        logger.error('错误详情:', error.stack || JSON.stringify(error));
+        logger.error('错误类型:', error.name || '未知错误类型');
+        logger.error('错误代码:', error.code || '无错误代码');
         throw error;
     }
 }
@@ -139,19 +202,21 @@ async function getChatHistory(userId) {
             return cached.data;
         }
         
-        const [rows] = await pool.execute(
+        // 使用带重试的查询
+        const rows = await queryWithRetry(
             'SELECT messages, timestamp FROM chat_records WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 1',
-            [conversationId]
+            [conversationId],
+            3
         );
         
-        if (rows.length > 0) {
+        if (rows && rows.length > 0) {
             let messages = [];
             try {
                 // 尝试解析数据库中的JSON
                 messages = typeof rows[0].messages === 'string' ? 
                     JSON.parse(rows[0].messages) : rows[0].messages;
             } catch (error) {
-                logger.error('解析聊天记录JSON失败:', error);
+                logger.error('解析聊天记录JSON失败:', error.message || error);
                 // 如果解析失败，返回空数组
                 messages = [];
             }
@@ -186,9 +251,12 @@ async function getChatHistory(userId) {
         
         return null;
     } catch (error) {
-        logger.error('获取聊天历史记录失败:', error);
-        logger.error('错误详情:', error.stack);
-        throw error;
+        logger.error('获取聊天历史记录失败:', error.message || error);
+        logger.error('错误详情:', error.stack || JSON.stringify(error));
+        logger.error('错误类型:', error.name || '未知错误类型');
+        logger.error('错误代码:', error.code || '无错误代码');
+        // 如果出错，返回null而不是抛出异常，提高应用稳定性
+        return null;
     }
 }
 

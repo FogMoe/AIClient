@@ -141,7 +141,12 @@ router.post('/', rateLimitMiddleware, async (req, res) => {
         }
 
         // 处理AI聊天
-        const result = await processChat(sanitizedMessage, validatedHistory, validSessionId);
+        const result = await processChat(
+            sanitizedMessage, 
+            validatedHistory, 
+            validSessionId,
+            req.session.user ? req.session.user.coins : undefined
+        );
         
         // 如果扣除了金币，添加到响应中
         if (req.session.user) {
