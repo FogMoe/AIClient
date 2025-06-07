@@ -10,10 +10,9 @@ app.listen(config.server.port, () => {
     console.log('按 Ctrl+C 停止服务器');
     
     // 记录配置信息
-    logger.info('服务器配置:', {
-        port: config.server.port,
-        logLevel: config.logging.level,
-        rateLimitEnabled: true,
-        azureConfigured: config.azureOpenAI.apiKey !== "<REPLACE_WITH_YOUR_KEY_VALUE_HERE>"
-    });
+    const isAzureConfigured = config.azureOpenAI.apiKey && 
+                             config.azureOpenAI.apiKey !== "<REPLACE_WITH_YOUR_KEY_VALUE_HERE>" && 
+                             config.azureOpenAI.apiKey.length > 0;
+    
+    logger.info(`服务器配置 - 端口: ${config.server.port}, 日志级别: ${config.logging.level}, 限流已启用: true, Azure API已配置: ${isAzureConfigured}`);
 });

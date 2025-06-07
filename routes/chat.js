@@ -64,10 +64,10 @@ router.post('/', rateLimitMiddleware, async (req, res) => {
             ? sessionId.replace(/[^a-zA-Z0-9\-_]/g, '') 
             : 'unknown';
 
-        // 调试日志 - 不记录完整消息内容以保护隐私
-        logger.info('接收到消息，长度:', sanitizedMessage.length);
-        logger.info('对话历史长度:', validatedHistory.length);
-        logger.info('会话ID:', validSessionId);
+        // 调试日志 
+        logger.info(`接收到消息，长度: ${sanitizedMessage.length}`);
+        logger.info(`对话历史长度: ${validatedHistory.length}`);
+        logger.info(`会话ID: ${validSessionId}`);
 
         // 处理AI聊天
         const result = await processChat(sanitizedMessage, validatedHistory, validSessionId);
