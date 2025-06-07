@@ -223,6 +223,11 @@ if (!sessionId) {
     localStorage.setItem('sessionId', sessionId);
 }
 
+// 增加同步聊天记录的控制变量
+let lastChatSyncTime = 0; // 上次同步聊天记录的时间戳
+const CHAT_SYNC_INTERVAL = 60000; // 聊天记录同步间隔（1分钟）
+let isUserTyping = false; // 用户是否正在输入
+
 // 添加本地存储聊天记录备份
 function backupChatHistoryToLocalStorage() {
     try {
@@ -395,7 +400,9 @@ function initializeBaseEventListeners() {
             }
             
             // 如果本地备份不可用或不完整，再尝试从服务器获取
-            reloadChatHistory(true).then(() => {
+            // 这里传递preserveScrollPosition=true以保持滚动位置
+            // 不强制同步，遵循同步频率限制
+            reloadChatHistory(true, false).then(() => {
                 // 如果用户之前接近底部，则滚动到底部
                 if (isNearBottom) {
                     scrollToBottom();
@@ -503,6 +510,9 @@ async function startNewChat() {
 async function handleSubmit(e) {
     e.preventDefault();
     
+    // 重置输入状态
+    isUserTyping = false;
+    
     const message = messageInput.value.trim();
     if (!message) return;
     
@@ -549,7 +559,8 @@ async function handleSubmit(e) {
             body: JSON.stringify({ 
                 message: formattedMessage,
                 history: conversationHistory,
-                sessionId
+                sessionId,
+                isHistoryFetch: false // 标记这是用户主动发送的消息，非历史记录请求
             })
         });
         
@@ -566,12 +577,26 @@ async function handleSubmit(e) {
             return;
         }
         
+        // 检查金币不足的情况
+        if (data.coinShortage) {
+            addMessage(data.response, 'assistant');
+            return;
+        }
+        
         if (!response.ok) {
             throw new Error(data.error || `HTTP error! status: ${response.status}`);
         }
         
         if (data.error) {
             throw new Error(data.error);
+        }
+        
+        // 实时更新用户金币数量（如果有）
+        if (data.updatedCoins !== undefined && currentUser) {
+            currentUser.coins = data.updatedCoins;
+            if (userCoins) {
+                userCoins.textContent = data.updatedCoins;
+            }
         }
         
         // 清除缓存，确保新消息能被正确保存和显示
@@ -590,6 +615,14 @@ async function handleSubmit(e) {
         
         // 更新聊天列表
         updateChatList();
+        
+        // 消息发送后，强制同步聊天记录（但放在最后执行）
+        setTimeout(() => {
+            const userId = getCurrentUserId();
+            if (userId) {
+                reloadChatHistory(false, true);
+            }
+        });
         
     } catch (error) {
         // 静默处理发送消息错误
@@ -613,14 +646,29 @@ function handleKeyPress(e) {
     // Shift+Enter 允许换行，不做任何处理
 }
 
-// 处理输入变化
-function handleInput() {
-    const hasText = messageInput.value.trim().length > 0;
-    sendButton.style.opacity = hasText ? '1' : '0.6';
-    sendButton.disabled = !hasText;
+// 处理输入框内容变化
+function handleInput(e) {
+    // 设置用户正在输入状态
+    isUserTyping = true;
     
-    // 自动调整文本框高度以适应多行内容
-    autoResizeTextarea();
+    // 调整输入框高度（如果是textarea）
+    if (e.target.tagName === 'TEXTAREA') {
+        e.target.style.height = 'auto';
+        e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; // 限制最大高度为200px
+    }
+    
+    // 设置发送按钮状态
+    const hasText = e.target.value.trim().length > 0;
+    if (sendButton) {
+        sendButton.style.opacity = hasText ? '1' : '0.6';
+        sendButton.disabled = !hasText;
+    }
+    
+    // 1秒后重置输入状态
+    clearTimeout(window.typingTimeout);
+    window.typingTimeout = setTimeout(() => {
+        isUserTyping = false;
+    }, 1000);
 }
 
 // 更新聊天列表 (已禁用)
@@ -630,12 +678,19 @@ function updateChatList() {
 }
 
 // 添加消息到聊天窗口
-function addMessage(text, type, timestamp = null) {
+function addMessage(text, type, timestamp = null, messageClass = '') {
     // 对于所有消息进行基本的安全清理
     const safeText = typeof text === 'string' ? text : '';
     
+    // 获取当前滚动位置
+    const currentScrollTop = chatMessages ? chatMessages.scrollTop : 0;
+    
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}`;
+    // 添加额外的消息类（如错误样式）
+    if (messageClass) {
+        messageDiv.classList.add(messageClass);
+    }
     
     const avatarDiv = document.createElement('div');
     avatarDiv.className = 'message-avatar';
@@ -677,8 +732,7 @@ function addMessage(text, type, timestamp = null) {
     messageDiv.appendChild(avatarDiv);
     messageDiv.appendChild(contentDiv);
     
-    // 在添加新消息前检查用户是否在底部或接近底部
-    const currentScrollTop = chatMessages ? chatMessages.scrollTop : 0;
+    // 计算是否接近底部（用于自动滚动）
     const currentScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
     const currentClientHeight = chatMessages ? chatMessages.clientHeight : 0;
     const isNearBottom = currentScrollHeight - currentScrollTop <= currentClientHeight + 50;
@@ -838,19 +892,41 @@ window.showConfirmModal = showConfirmModal;
 
 // 检查服务器连接
 async function checkServerConnection() {
+    // 检查是否在过去60秒内已经进行过连接检查
+    const lastCheckTime = localStorage.getItem('lastConnectionCheck');
+    const now = Date.now();
+    
+    if (lastCheckTime && (now - parseInt(lastCheckTime)) < 60000) {
+        // 如果60秒内已经检查过，跳过此次检查
+        return;
+    }
+    
     try {
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ message: 'ping' })
+            body: JSON.stringify({ 
+                message: 'ping', 
+                isHistoryFetch: true 
+            })
         });
+        
+        // 记录此次检查时间
+        localStorage.setItem('lastConnectionCheck', now.toString());
+        
+        // 如果遇到429错误，静默处理
+        if (response.status === 429) {
+            return;
+        }
         
         // 静默处理服务器连接正常情况
     } catch (error) {
-        // 静默处理服务器连接错误
-        showErrorModal(t('messages.serverError'));
+        // 只有在真正的连接错误时才显示错误模态框
+        if (error.name !== 'AbortError') {
+            showErrorModal(t('messages.serverError'));
+        }
     }
 }
 
@@ -1060,6 +1136,19 @@ function initializeChatApp() {
     
     // 加载用户的聊天历史记录
     loadChatHistory();
+    
+    // 设置定时同步聊天记录（每分钟检查一次）
+    setInterval(() => {
+        // 只在用户未输入时进行同步
+        if (!isUserTyping && currentUser) {
+            const userId = getCurrentUserId();
+            if (userId) {
+                // 静默同步，不强制，遵循频率限制
+                reloadChatHistory(true, false).catch(err => {
+                });
+            }
+        }
+    }, CHAT_SYNC_INTERVAL);
 }
 
 async function handleLogout() {
@@ -1096,7 +1185,20 @@ async function loadChatHistory() {
             return;
         }
         
-        // 首先尝试从本地存储恢复
+        // 首次加载时强制同步
+        const isFirstLoad = !lastChatSyncTime;
+        
+        // 首先尝试从服务器获取最新记录
+        try {
+            // 首次加载时强制同步，否则遵循同步频率限制
+            await fetchServerChatHistory(userId, isFirstLoad);
+            // 如果成功获取服务器数据，直接返回，不再使用本地存储
+            return;
+        } catch (serverError) {
+            // 如果服务器获取失败，尝试使用本地存储作为备选
+        }
+        
+        // 如果服务器获取失败，才从本地存储恢复
         const localBackup = restoreChatHistoryFromLocalStorage();
         if (localBackup && localBackup.length > 0) {
             chatHistory = localBackup;
@@ -1111,25 +1213,25 @@ async function loadChatHistory() {
             
             // 显示历史消息
             displayChatHistory(false);
-            
-            
-            
-            // 后台仍然从服务器获取最新记录进行验证
-            fetchServerChatHistory(userId);
-            return;
         }
-        
-        // 如果本地存储中没有记录，则从服务器获取
-        await fetchServerChatHistory(userId);
-        
     } catch (error) {
-        
         // 静默处理加载历史记录失败
     }
 }
 
 // 从服务器获取聊天历史
-async function fetchServerChatHistory(userId) {
+async function fetchServerChatHistory(userId, forceSync = false) {
+    // 检查同步频率限制（除非强制同步）
+    const now = Date.now();
+    if (!forceSync && (now - lastChatSyncTime < CHAT_SYNC_INTERVAL)) {
+        return false;
+    }
+    
+    // 如果用户正在输入，延迟同步（除非强制同步）
+    if (!forceSync && isUserTyping) {
+        return false;
+    }
+    
     try {
         const response = await fetch(`/api/chat-history/${userId}`, {
             method: 'GET',
@@ -1140,23 +1242,28 @@ async function fetchServerChatHistory(userId) {
             throw new Error(`HTTP ${response.status}`);
         }
         
+        // 更新最后同步时间
+        lastChatSyncTime = now;
+        
         const data = await response.json();
         
-        if (data.success && data.messages && data.messages.length > 0) {
-            // 如果本地记录比服务器记录少，则使用服务器记录
-            if (!chatHistory || chatHistory.length < data.messages.length) {
-                // 恢复聊天历史
-                chatHistory = data.messages;
-                
-                // 更新本地备份
-                backupChatHistoryToLocalStorage();
-                
-                // 更新缓存
-                const cacheKey = `chat_${userId}`;
-                chatHistoryCache.set(cacheKey, data.messages);
-                lastCacheTime = Date.now();
-                
-                // 显示聊天界面
+        if (data.success && data.messages) {
+            // 服务器返回的聊天记录（即使为空数组也使用它，这表示没有聊天记录或已清空）
+            // 不再检查messages.length > 0，始终使用服务器返回的数据
+            
+            // 更新聊天历史
+            chatHistory = data.messages;
+            
+            // 更新本地备份
+            backupChatHistoryToLocalStorage();
+            
+            // 更新缓存
+            const cacheKey = `chat_${userId}`;
+            chatHistoryCache.set(cacheKey, data.messages);
+            lastCacheTime = now;
+            
+            // 如果有消息，显示聊天界面
+            if (data.messages.length > 0) {
                 if (welcomeScreen) {
                     welcomeScreen.style.display = 'none';
                 }
@@ -1167,17 +1274,19 @@ async function fetchServerChatHistory(userId) {
                 
                 // 显示历史消息
                 displayChatHistory(false);
-                
-                
             }
+            
+            return true;
         }
-    } catch (error) {
         
+        return false;
+    } catch (error) {
+        throw error; // 重新抛出错误，让调用者处理
     }
 }
 
 // 重新加载聊天历史记录（用于消息发送后同步或页面焦点变化时）
-async function reloadChatHistory(preserveScrollPosition = false) {
+async function reloadChatHistory(preserveScrollPosition = false, forceSync = false) {
     try {
         // 使用用户ID作为conversation_id
         const userId = getCurrentUserId();
@@ -1191,10 +1300,69 @@ async function reloadChatHistory(preserveScrollPosition = false) {
         const currentClientHeight = chatMessages ? chatMessages.clientHeight : 0;
         const isNearBottom = currentScrollHeight - currentScrollTop <= currentClientHeight + 50;
         
-        // 检查本地备份是否比当前记录更新
+        // 检查同步频率限制
+        const now = Date.now();
+        if (!forceSync && (now - lastChatSyncTime < CHAT_SYNC_INTERVAL)) {
+            return;
+        }
+        
+        // 如果用户正在输入，延迟同步
+        if (!forceSync && isUserTyping) {
+            return;
+        }
+        
+        // 优先从服务器获取最新数据
+        try {
+            // 从服务器获取最新数据
+            const response = await fetch(`/api/chat-history/${userId}`, {
+                method: 'GET',
+                credentials: 'same-origin'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            // 更新最后同步时间
+            lastChatSyncTime = now;
+            
+            const data = await response.json();
+            
+            // 无论服务器返回什么数据，都优先使用（即使为空也使用，表示聊天记录被清空）
+            if (data.success) {
+                // 清空当前显示的消息
+                if (chatMessages) {
+                    chatMessages.innerHTML = '';
+                }
+                
+                // 更新聊天历史
+                chatHistory = data.messages || [];
+                
+                // 更新本地备份
+                backupChatHistoryToLocalStorage();
+                
+                // 更新缓存
+                const cacheKey = `chat_${userId}`;
+                chatHistoryCache.set(cacheKey, data.messages);
+                lastCacheTime = now;
+                
+                // 重新显示历史消息
+                displayChatHistory(preserveScrollPosition);
+                
+                // 如果用户之前接近底部，或者不需要保持滚动位置，则滚动到底部
+                if (isNearBottom || !preserveScrollPosition) {
+                    scrollToBottom();
+                }
+                
+                return;
+            }
+        } catch (serverError) {
+        }
+        
+        // 只有在服务器获取失败时才考虑使用本地备份
         const localBackup = restoreChatHistoryFromLocalStorage();
-        if (localBackup && localBackup.length > chatHistory.length) {
-            // 本地备份比当前记录更新，使用本地备份
+        if (localBackup && localBackup.length > 0) {
+            // 本地备份作为备选
             chatHistory = localBackup;
             
             // 清空当前显示的消息
@@ -1209,50 +1377,8 @@ async function reloadChatHistory(preserveScrollPosition = false) {
             if (isNearBottom || !preserveScrollPosition) {
                 scrollToBottom();
             }
-            
-            return;
-        }
-        
-        // 如果本地备份不比当前记录更新，再从服务器获取
-        const response = await fetch(`/api/chat-history/${userId}`, {
-            method: 'GET',
-            credentials: 'same-origin'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        // 只有当服务器返回的记录比当前记录长时才更新
-        if (data.success && data.messages && data.messages.length > chatHistory.length) {
-            // 清空当前显示的消息
-            if (chatMessages) {
-                chatMessages.innerHTML = '';
-            }
-            
-            // 更新聊天历史
-            chatHistory = data.messages;
-            
-            // 更新本地备份
-            backupChatHistoryToLocalStorage();
-            
-            // 更新缓存
-            const cacheKey = `chat_${userId}`;
-            chatHistoryCache.set(cacheKey, data.messages);
-            lastCacheTime = Date.now();
-            
-            // 重新显示历史消息
-            displayChatHistory(preserveScrollPosition);
-            
-            // 如果用户之前接近底部，或者不需要保持滚动位置，则滚动到底部
-            if (isNearBottom || !preserveScrollPosition) {
-                scrollToBottom();
-            }
         }
     } catch (error) {
-        
         // 静默处理重新加载历史记录失败
     }
 }
@@ -1270,6 +1396,12 @@ function displayChatHistory(preserveScrollPosition = false) {
     if (!chatHistory || chatHistory.length === 0) {
         return;
     }
+    
+    // 保存当前滚动位置
+    const currentScrollTop = chatMessages ? chatMessages.scrollTop : 0;
+    const currentScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
+    const currentClientHeight = chatMessages ? chatMessages.clientHeight : 0;
+    const isNearBottom = currentScrollHeight - currentScrollTop <= currentClientHeight + 50;
     
     let lastUserTimestamp = null;
     
@@ -1299,8 +1431,8 @@ function displayChatHistory(preserveScrollPosition = false) {
         }
     });
     
-    // 只有在不需要保持滚动位置时才滚动到底部
-    if (!preserveScrollPosition) {
+    // 只有在明确要求滚动到底部(preserveScrollPosition=false)或用户之前已经在底部附近时才滚动
+    if (!preserveScrollPosition && isNearBottom) {
         scrollToBottom();
     }
 }

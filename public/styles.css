@@ -347,8 +347,6 @@ body {
     font-weight: 300;
 }
 
-
-
 /* 聊天区域 */
 .chat-container {
     flex: 1;
@@ -886,8 +884,6 @@ body {
     color: #374151;
     line-height: 1.5;
 }
-
-
 
 .btn {
     padding: 8px 16px;

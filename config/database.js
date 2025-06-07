@@ -279,6 +279,42 @@ async function saveChatHistory(conversationId, newMessages) {
     }
 }
 
+// 更新用户金币
+async function updateUserCoins(userId, amount) {
+    try {
+        // 确保userId是数字类型
+        const numericUserId = parseInt(userId, 10);
+        if (isNaN(numericUserId)) {
+            logger.error('更新金币失败：无效的用户ID:', userId);
+            return false;
+        }
+        
+        // 获取当前用户信息
+        const user = await getUserById(numericUserId);
+        if (!user) {
+            logger.error('更新金币失败：找不到用户:', numericUserId);
+            return false;
+        }
+        
+        // 计算新的金币数量（不能小于0）
+        const newCoins = Math.max(0, user.coins + amount);
+        
+        // 更新金币
+        const updateSql = `
+            UPDATE user 
+            SET coins = ? 
+            WHERE id = ?
+        `;
+        await query(updateSql, [newCoins, numericUserId]);
+        
+        logger.info(`用户 ${numericUserId} 金币已更新，变动: ${amount}, 当前总量: ${newCoins}`);
+        return {success: true, newCoins};
+    } catch (error) {
+        logger.error('更新用户金币失败:', error);
+        return false;
+    }
+}
+
 module.exports = {
     pool,
     query,
@@ -287,5 +323,6 @@ module.exports = {
     validateLogin,
     getChatHistory,
     saveChatHistory,
-    deleteChatHistory
+    deleteChatHistory,
+    updateUserCoins
 };

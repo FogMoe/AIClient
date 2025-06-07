@@ -19,7 +19,7 @@ module.exports = {
       // 频率限制配置
     rateLimit: {
         windowMs: 60 * 1000, // 1分钟（毫秒）
-        maxRequests: 5, // 每分钟最大请求数
+        maxRequests: 15, // 每分钟最大请求数，从5增加到15
     },
       // Cloudflare Turnstile 配置
     turnstile: {
