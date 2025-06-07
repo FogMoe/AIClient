@@ -1248,6 +1248,11 @@ async function fetchServerChatHistory(userId, forceSync = false) {
         const data = await response.json();
         
         if (data.success && data.messages) {
+            // 如果没有变化，不需要更新UI
+            if (JSON.stringify(chatHistory) === JSON.stringify(data.messages)) {
+                return true;
+            }
+            
             // 服务器返回的聊天记录（即使为空数组也使用它，这表示没有聊天记录或已清空）
             // 不再检查messages.length > 0，始终使用服务器返回的数据
             
@@ -1272,8 +1277,8 @@ async function fetchServerChatHistory(userId, forceSync = false) {
                     chatMessages.innerHTML = ''; // 清空当前显示
                 }
                 
-                // 显示历史消息
-                displayChatHistory(false);
+                // 显示历史消息，传入true表示需要保持滚动位置
+                displayChatHistory(true);
             }
             
             return true;
@@ -1293,12 +1298,6 @@ async function reloadChatHistory(preserveScrollPosition = false, forceSync = fal
         if (!userId) {
             return;
         }
-        
-        // 检查用户是否在底部或接近底部（50px误差范围）
-        const currentScrollTop = chatMessages ? chatMessages.scrollTop : 0;
-        const currentScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
-        const currentClientHeight = chatMessages ? chatMessages.clientHeight : 0;
-        const isNearBottom = currentScrollHeight - currentScrollTop <= currentClientHeight + 50;
         
         // 检查同步频率限制
         const now = Date.now();
@@ -1328,6 +1327,11 @@ async function reloadChatHistory(preserveScrollPosition = false, forceSync = fal
             
             const data = await response.json();
             
+            // 如果没有变化，不需要更新UI
+            if (JSON.stringify(chatHistory) === JSON.stringify(data.messages || [])) {
+                return;
+            }
+            
             // 无论服务器返回什么数据，都优先使用（即使为空也使用，表示聊天记录被清空）
             if (data.success) {
                 // 清空当前显示的消息
@@ -1349,14 +1353,10 @@ async function reloadChatHistory(preserveScrollPosition = false, forceSync = fal
                 // 重新显示历史消息
                 displayChatHistory(preserveScrollPosition);
                 
-                // 如果用户之前接近底部，或者不需要保持滚动位置，则滚动到底部
-                if (isNearBottom || !preserveScrollPosition) {
-                    scrollToBottom();
-                }
-                
                 return;
             }
         } catch (serverError) {
+            // 静默处理错误
         }
         
         // 只有在服务器获取失败时才考虑使用本地备份
@@ -1372,11 +1372,6 @@ async function reloadChatHistory(preserveScrollPosition = false, forceSync = fal
             
             // 重新显示聊天历史
             displayChatHistory(preserveScrollPosition);
-            
-            // 如果用户之前接近底部，或者不需要保持滚动位置，则滚动到底部
-            if (isNearBottom || !preserveScrollPosition) {
-                scrollToBottom();
-            }
         }
     } catch (error) {
         // 静默处理重新加载历史记录失败
@@ -1397,11 +1392,16 @@ function displayChatHistory(preserveScrollPosition = false) {
         return;
     }
     
-    // 保存当前滚动位置
-    const currentScrollTop = chatMessages ? chatMessages.scrollTop : 0;
-    const currentScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
-    const currentClientHeight = chatMessages ? chatMessages.clientHeight : 0;
-    const isNearBottom = currentScrollHeight - currentScrollTop <= currentClientHeight + 50;
+    // 保存当前滚动位置和内容高度(用于之后比较变化)
+    const beforeScrollTop = chatMessages ? chatMessages.scrollTop : 0;
+    const beforeScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
+    const clientHeight = chatMessages ? chatMessages.clientHeight : 0;
+    
+    // 判断用户是否在底部附近(50px误差范围)
+    const isNearBottom = beforeScrollHeight - beforeScrollTop <= clientHeight + 50;
+    
+    // 记录原来的消息数量
+    const oldMessageCount = chatMessages ? chatMessages.childElementCount : 0;
     
     let lastUserTimestamp = null;
     
@@ -1431,9 +1431,27 @@ function displayChatHistory(preserveScrollPosition = false) {
         }
     });
     
-    // 只有在明确要求滚动到底部(preserveScrollPosition=false)或用户之前已经在底部附近时才滚动
-    if (!preserveScrollPosition && isNearBottom) {
+    // 计算内容高度变化
+    const afterScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
+    const newMessageCount = chatMessages ? chatMessages.childElementCount : 0;
+    const hasNewMessages = newMessageCount > oldMessageCount;
+    
+    // 滚动策略:
+    // 1. 如果明确要求不保持滚动位置，则滚动到底部
+    // 2. 如果用户之前在底部附近，则滚动到底部
+    // 3. 如果有新消息且当前视口能容纳(内容高度变化小于视口高度)，可以滚动到底部
+    // 4. 其他情况保持当前滚动位置
+    if (!preserveScrollPosition) {
         scrollToBottom();
+    } else if (isNearBottom) {
+        scrollToBottom();
+    } else if (hasNewMessages && (afterScrollHeight - beforeScrollHeight) < clientHeight) {
+        // 如果内容高度增加小于视口高度，说明当前视口能容纳新内容，可以滚动显示
+        scrollToBottom();
+    } else if (hasNewMessages) {
+        // 如果有新消息但当前视口不能完全容纳，保持原来的相对滚动位置
+        // 计算新的滚动位置：保持相对位置不变
+        chatMessages.scrollTop = beforeScrollTop + (afterScrollHeight - beforeScrollHeight);
     }
 }
 
