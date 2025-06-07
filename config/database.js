@@ -10,10 +10,7 @@ const dbConfig = {
     database: process.env.DB_NAME,
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0,
-    acquireTimeout: 60000,
-    timeout: 60000,
-    reconnect: true
+    queueLimit: 0
 };
 
 // 创建连接池
@@ -32,6 +29,33 @@ async function testConnection() {
     }
 }
 
+// 删除聊天记录
+async function deleteChatHistory(conversationId) {
+    try {
+        // 确保conversationId是数字类型
+        const numericConversationId = parseInt(conversationId, 10);
+        if (isNaN(numericConversationId)) {
+            logger.error('无效的对话ID:', conversationId);
+            throw new Error('无效的对话ID');
+        }
+
+        const sql = 'DELETE FROM chat_records WHERE conversation_id = ?';
+        const [result] = await pool.execute(sql, [numericConversationId]);
+
+        if (result.affectedRows > 0) {
+            logger.info(`聊天记录已删除，conversation_id: ${numericConversationId}`);
+            return true;
+        } else {
+            logger.warn(`尝试删除聊天记录，但未找到匹配的记录，conversation_id: ${numericConversationId}`);
+            return false; // 未找到记录或未删除任何行
+        }
+    } catch (error) {
+        logger.error('删除聊天记录失败:', error);
+        logger.error('错误详情:', error.stack);
+        throw error;
+    }
+}
+
 // 执行查询
 async function query(sql, params = []) {
     try {
@@ -39,6 +63,33 @@ async function query(sql, params = []) {
         return rows;
     } catch (error) {
         logger.error('数据库查询错误:', error.message);
+        throw error;
+    }
+}
+
+// 删除聊天记录
+async function deleteChatHistory(conversationId) {
+    try {
+        // 确保conversationId是数字类型
+        const numericConversationId = parseInt(conversationId, 10);
+        if (isNaN(numericConversationId)) {
+            logger.error('无效的对话ID:', conversationId);
+            throw new Error('无效的对话ID');
+        }
+
+        const sql = 'DELETE FROM chat_records WHERE conversation_id = ?';
+        const [result] = await pool.execute(sql, [numericConversationId]);
+
+        if (result.affectedRows > 0) {
+            logger.info(`聊天记录已删除，conversation_id: ${numericConversationId}`);
+            return true;
+        } else {
+            logger.warn(`尝试删除聊天记录，但未找到匹配的记录，conversation_id: ${numericConversationId}`);
+            return false; // 未找到记录或未删除任何行
+        }
+    } catch (error) {
+        logger.error('删除聊天记录失败:', error);
+        logger.error('错误详情:', error.stack);
         throw error;
     }
 }
@@ -66,10 +117,158 @@ async function validateLogin(userId, password) {
     return users.length > 0 ? users[0] : null;
 }
 
+// 获取用户聊天历史记录
+async function getChatHistory(userId) {
+    try {
+        // 确保userId是数字类型
+        const conversationId = parseInt(userId, 10);
+        if (isNaN(conversationId)) {
+            logger.error('无效的用户ID:', userId);
+            return null;
+        }
+        
+        const [rows] = await pool.execute(
+            'SELECT messages, timestamp FROM chat_records WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 1',
+            [conversationId]
+        );
+        
+        if (rows.length > 0) {
+            const messages = rows[0].messages;
+            
+            // 过滤掉测试消息（ping-pong等）
+             const filteredMessages = messages.filter(msg => {
+                 if (msg && msg.content) {
+                     const content = msg.content.toLowerCase().trim();
+                     // 过滤ping-pong测试消息
+                     if (content === 'ping' || content === 'pong') {
+                         return false;
+                     }
+                     return true;
+                 }
+                 return false; // 如果msg或msg.content为空，则过滤掉此消息
+             });
+            
+            return {
+                messages: filteredMessages,
+                timestamp: rows[0].timestamp
+            };
+        }
+        
+        return null;
+    } catch (error) {
+        logger.error('获取聊天历史记录失败:', error);
+        logger.error('错误详情:', error.stack);
+        throw error;
+    }
+}
+
+// 删除聊天记录
+async function deleteChatHistory(conversationId) {
+    try {
+        // 确保conversationId是数字类型
+        const numericConversationId = parseInt(conversationId, 10);
+        if (isNaN(numericConversationId)) {
+            logger.error('无效的对话ID:', conversationId);
+            throw new Error('无效的对话ID');
+        }
+
+        const sql = 'DELETE FROM chat_records WHERE conversation_id = ?';
+        const [result] = await pool.execute(sql, [numericConversationId]);
+
+        if (result.affectedRows > 0) {
+            logger.info(`聊天记录已删除，conversation_id: ${numericConversationId}`);
+            return true;
+        } else {
+            logger.warn(`尝试删除聊天记录，但未找到匹配的记录，conversation_id: ${numericConversationId}`);
+            return false; // 未找到记录或未删除任何行
+        }
+    } catch (error) {
+        logger.error('删除聊天记录失败:', error);
+        logger.error('错误详情:', error.stack);
+        throw error;
+    }
+}
+
+// 保存聊天记录
+async function saveChatHistory(conversationId, newMessages) {
+    try {
+        // 确保conversationId是数字类型
+        const numericConversationId = parseInt(conversationId, 10);
+        if (isNaN(numericConversationId)) {
+            logger.error('无效的对话ID:', conversationId);
+            throw new Error('无效的对话ID');
+        }
+        
+        // 先获取现有的完整聊天记录
+        const existingHistoryRecord = await getChatHistory(numericConversationId);
+        const existingHistory = existingHistoryRecord ? existingHistoryRecord.messages : [];
+        
+        // 将新消息追加到现有历史记录中
+        const allMessages = [...existingHistory, ...newMessages];
+        
+        // 检查是否存在记录
+        const checkSql = 'SELECT id FROM chat_records WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT 1';
+        const existingRecords = await query(checkSql, [numericConversationId]);
+        
+        if (existingRecords.length > 0) {
+            // 更新现有记录
+            const updateSql = `
+                UPDATE chat_records 
+                SET messages = ?, timestamp = CURRENT_TIMESTAMP 
+                WHERE id = ?
+            `;
+            await query(updateSql, [JSON.stringify(allMessages), existingRecords[0].id]);
+            logger.info(`聊天记录已更新，conversation_id: ${numericConversationId}, 总消息数量: ${allMessages.length}`);
+        } else {
+            // 插入新记录
+            const insertSql = `
+                INSERT INTO chat_records (conversation_id, messages) 
+                VALUES (?, ?)
+            `;
+            await query(insertSql, [numericConversationId, JSON.stringify(allMessages)]);
+            logger.info(`聊天记录已创建，conversation_id: ${numericConversationId}, 总消息数量: ${allMessages.length}`);
+        }
+    } catch (error) {
+        logger.error('保存聊天记录失败:', error);
+        logger.error('错误详情:', error.stack);
+        throw error;
+    }
+}
+
+// 删除聊天记录
+async function deleteChatHistory(conversationId) {
+    try {
+        // 确保conversationId是数字类型
+        const numericConversationId = parseInt(conversationId, 10);
+        if (isNaN(numericConversationId)) {
+            logger.error('无效的对话ID:', conversationId);
+            throw new Error('无效的对话ID');
+        }
+
+        const sql = 'DELETE FROM chat_records WHERE conversation_id = ?';
+        const [result] = await pool.execute(sql, [numericConversationId]);
+
+        if (result.affectedRows > 0) {
+            logger.info(`聊天记录已删除，conversation_id: ${numericConversationId}`);
+            return true;
+        } else {
+            logger.warn(`尝试删除聊天记录，但未找到匹配的记录，conversation_id: ${numericConversationId}`);
+            return false; // 未找到记录或未删除任何行
+        }
+    } catch (error) {
+        logger.error('删除聊天记录失败:', error);
+        logger.error('错误详情:', error.stack);
+        throw error;
+    }
+}
+
 module.exports = {
     pool,
     query,
     testConnection,
     getUserById,
-    validateLogin
-}; 
+    validateLogin,
+    getChatHistory,
+    saveChatHistory,
+    deleteChatHistory
+};

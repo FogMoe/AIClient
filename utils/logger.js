@@ -24,17 +24,7 @@ const logger = winston.createLogger({
     ]
 });
 
-// 写入对话历史日志
-function writeHistoryLog(sessionId, history) {
-    if (sessionId === 'unknown') return;
-    
-    const historyLogPath = `${config.logging.logDir}/history-${sessionId}.log`;
-    const historyLogEntry = `\n[${new Date().toISOString()}]\n${JSON.stringify(history, null, 2)}\n`;
-    
-    fs.appendFile(historyLogPath, historyLogEntry, err => {
-        if (err) logger.error('写入对话历史日志失败:', err);
-    });
-}
+
 
 // 替换console.log/console.error为logger
 function setupConsoleOverride() {
@@ -44,6 +34,5 @@ function setupConsoleOverride() {
 
 module.exports = {
     logger,
-    writeHistoryLog,
     setupConsoleOverride
-}; 
+};

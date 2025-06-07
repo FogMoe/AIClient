@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { rateLimitMiddleware } = require('../middleware/rateLimiter');
 const { processChat } = require('../services/aiService');
+const { saveChatHistory, getChatHistory } = require('../config/database');
 const { logger } = require('../utils/logger');
 
 // 输入验证和清理函数
@@ -57,7 +58,25 @@ router.post('/', rateLimitMiddleware, async (req, res) => {
         
         // 验证和清理输入
         const sanitizedMessage = validateAndSanitizeInput(message);
-        const validatedHistory = validateHistory(history);
+        
+        // 如果用户已登录，从数据库加载历史记录
+        let validatedHistory = [];
+        if (req.session.user) {
+            try {
+                const userId = req.session.user.id;
+                const dbHistoryRecord = await getChatHistory(userId);
+                const dbHistory = dbHistoryRecord ? dbHistoryRecord.messages : [];
+                validatedHistory = validateHistory(dbHistory);
+                logger.info(`从数据库加载历史记录，长度: ${validatedHistory.length}`);
+            } catch (error) {
+                logger.error('加载历史记录失败:', error.message);
+                // 如果加载失败，使用前端传来的历史记录作为备选
+                validatedHistory = validateHistory(history);
+            }
+        } else {
+            // 未登录用户使用前端传来的历史记录
+            validatedHistory = validateHistory(history);
+        }
         
         // 验证会话ID
         const validSessionId = typeof sessionId === 'string' && sessionId.length <= 50 
@@ -71,6 +90,43 @@ router.post('/', rateLimitMiddleware, async (req, res) => {
 
         // 处理AI聊天
         const result = await processChat(sanitizedMessage, validatedHistory, validSessionId);
+        
+        // 如果用户已登录且聊天成功，保存聊天记录
+        if (req.session.user && result.response) {
+            try {
+                const userId = req.session.user.id;
+                
+                // 创建新的消息对（用户消息和AI回复）
+                const newMessages = [
+                    { role: 'user', content: sanitizedMessage },
+                    { role: 'assistant', content: result.response }
+                ];
+                
+                // 过滤掉测试消息（ping-pong等）
+                const filteredNewMessages = newMessages.filter(msg => {
+                    const content = msg.content.toLowerCase().trim();
+                    // 过滤ping-pong测试消息
+                    if (content === 'ping' || content === 'pong') {
+                        return false;
+                    }
+                    // 过滤其他明确的测试消息
+                    if (/^(test|测试)$/i.test(content)) {
+                        return false;
+                    }
+                    return true;
+                });
+                
+                // 只有在有有效消息时才保存
+                if (filteredNewMessages.length > 0) {
+                    // 异步保存聊天记录，不阻塞响应
+                    saveChatHistory(userId, filteredNewMessages).catch(error => {
+                        logger.error('保存聊天记录失败:', error.message);
+                    });
+                }
+            } catch (error) {
+                logger.error('处理聊天记录保存时出错:', error.message);
+            }
+        }
         
         res.json(result);
 
@@ -92,4 +148,4 @@ router.post('/', rateLimitMiddleware, async (req, res) => {
     }
 });
 
-module.exports = router; 
+module.exports = router;

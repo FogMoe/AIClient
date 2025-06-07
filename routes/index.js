@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const chatRoutes = require('./chat');
+const chatHistoryRoutes = require('./chatHistory');
 const { router: authRoutes, requireAuth } = require('./auth');
 const config = require('../config');
 
@@ -19,6 +20,9 @@ router.get('/', (req, res) => {
 
 // 聊天API路由（需要登录）
 router.use('/api/chat', requireAuth, chatRoutes);
+
+// 聊天历史API路由（需要登录）
+router.use('/api/chat-history', requireAuth, chatHistoryRoutes);
 
 // Turnstile配置API
 router.get('/api/turnstile-config', (req, res) => {
@@ -48,4 +52,4 @@ router.get('/health', (req, res) => {
     });
 });
 
-module.exports = router; 
+module.exports = router;

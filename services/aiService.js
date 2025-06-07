@@ -1,6 +1,6 @@
 const { AzureOpenAI } = require("openai");
 const config = require('../config');
-const { logger, writeHistoryLog } = require('../utils/logger');
+const { logger } = require('../utils/logger');
 
 // 安全清理函数（用于后端）
 function sanitizeForDisplay(text) {
@@ -72,9 +72,7 @@ async function processChat(message, history, sessionId) {
             logger.info('未配置Azure OpenAI API密钥，使用模拟响应');
             const simulatedResponse = generateSimulatedResponse(message, history);
             
-            // 写入对话历史日志
-            const fullHistory = [...history, { role: "assistant", content: simulatedResponse }];
-            writeHistoryLog(sessionId, fullHistory);
+
             
             return {
                 response: simulatedResponse,
@@ -94,7 +92,8 @@ async function processChat(message, history, sessionId) {
             // 构建完整的对话消息数组
             const messages = [
                 { role: "system", content: config.assistant.getSystemMessage() },
-                ...history
+                ...history,
+                { role: "user", content: message }
             ];
 
             const result = await client.chat.completions.create({
@@ -115,9 +114,7 @@ async function processChat(message, history, sessionId) {
                 aiResponse = '抱歉，出现异常，请稍后再试';
             }
 
-            // 写入对话历史日志
-            const fullHistory = [...history, { role: "assistant", content: aiResponse }];
-            writeHistoryLog(sessionId, fullHistory);
+
 
             return {
                 response: aiResponse,
@@ -131,9 +128,7 @@ async function processChat(message, history, sessionId) {
             const simulatedResponse = generateSimulatedResponse(message, history);
             const fallbackResponse = simulatedResponse + '\n\n*注意：当前使用演示模式，因为AI服务不可用*';
             
-            // 写入对话历史日志
-            const fullHistory = [...history, { role: "assistant", content: fallbackResponse }];
-            writeHistoryLog(sessionId, fullHistory);
+
             
             return {
                 response: fallbackResponse,
@@ -152,4 +147,4 @@ module.exports = {
     generateSimulatedResponse,
     isAzureConfigured,
     sanitizeForDisplay
-}; 
+};

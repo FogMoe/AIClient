@@ -18,7 +18,10 @@ const translations = {
         'messages.welcome': '您好！我是雾萌娘，有什么可以帮助您的吗？',
         'time.justNow': '刚刚',
         'time.minutesAgo': '{0}分钟前',
-        'time.hoursAgo': '{0}小时前'
+        'time.hoursAgo': '{0}小时前',
+        'confirm.clearHistory': '新建对话会清空当前聊天记录，确定要继续吗？',
+        'error.clearHistoryFailed': '清除聊天记录失败。',
+        'error.clearHistoryNetwork': '清除聊天记录时发生网络错误。'
     },
     'en': {
         'page.title': 'FOGMOE AI Assistant',
@@ -38,7 +41,10 @@ const translations = {
         'messages.welcome': 'Hello! I am FOGMOE AI assistant. How can I help you?',
         'time.justNow': 'Just now',
         'time.minutesAgo': '{0} minutes ago',
-        'time.hoursAgo': '{0} hours ago'
+        'time.hoursAgo': '{0} hours ago',
+        'confirm.clearHistory': 'Starting a new chat will clear the current chat history. Are you sure you want to continue?',
+        'error.clearHistoryFailed': 'Failed to clear chat history from the server, but local history has been cleared.',
+        'error.clearHistoryNetwork': 'A network error occurred while clearing chat history.'
     }
 };
 
@@ -199,6 +205,7 @@ const appContainer = document.getElementById('appContainer');
 // 初始化
 let chatHistory = [];
 let currentChatId = null;
+let currentUser = null; // 存储当前用户信息
 
 // 会话唯一ID
 let sessionId = localStorage.getItem('sessionId');
@@ -328,14 +335,40 @@ function toggleLanguage() {
 }
 
 // 新建对话
-function startNewChat() {
-    currentChatId = Date.now().toString();
-    chatHistory = [];
-    // 清空DOM中的聊天消息
-    chatMessages.innerHTML = '';
-    chatMessages.style.display = 'none';
-    welcomeScreen.style.display = 'flex';
-    updateChatList();
+async function startNewChat() {
+    // 弹出确认对话框
+    const confirmClear = confirm(t('confirm.clearHistory', '新建对话会清空当前聊天记录，确定要继续吗？'));
+
+    if (confirmClear) {
+        // 如果用户已登录，则尝试从后端删除聊天记录
+        if (currentUser) {
+            try {
+                const userId = getCurrentUserId();
+                if (userId) {
+                    const response = await fetch(`/api/chat-history/${userId}`, {
+                        method: 'DELETE',
+                    });
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        console.error('Failed to delete chat history from server:', errorData.message);
+                        // 即使后端删除失败，也继续清空前端，或给出提示
+                        showErrorModal(t('error.clearHistoryFailed', '从服务器清除聊天记录失败，但本地记录已清除。'));
+                    }
+                }
+            } catch (error) {
+                console.error('Error deleting chat history from server:', error);
+                showErrorModal(t('error.clearHistoryNetwork', '清除聊天记录时发生网络错误。'));
+            }
+        }
+
+        // 清空前端聊天记录和界面
+        currentChatId = Date.now().toString(); // 为新对话生成新的ID
+        chatHistory = [];
+        chatMessages.innerHTML = '';
+        chatMessages.style.display = 'none';
+        welcomeScreen.style.display = 'flex';
+        updateChatList(); // 更新侧边栏的聊天列表（如果适用）
+    }
 }
 
 // 处理表单提交
@@ -354,7 +387,13 @@ async function handleSubmit(e) {
         }
     }
     
-    // 添加用户消息
+    // 格式化消息：添加时间戳和用户名
+    const now = new Date();
+    const messageTime = formatTime(now.getTime());
+    const userName = currentUser ? currentUser.name : '用户';
+    const formattedMessage = `${messageTime} @${userName} 说：\n${message}`;
+    
+    // 添加用户消息（显示原始消息）
     addMessage(message, 'user');
     
     // 清空输入框并禁用
@@ -367,18 +406,18 @@ async function handleSubmit(e) {
     try {
         // 构建对话历史，用于发送给服务器
         const conversationHistory = chatHistory.map(msg => ({
-            role: msg.type === 'user' ? 'user' : 'assistant',
-            content: msg.text
+            role: msg.role,
+            content: msg.content
         }));
         
-        // 发送消息和对话历史到服务器
+        // 发送格式化后的消息和对话历史到服务器
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ 
-                message,
+                message: formattedMessage,
                 history: conversationHistory,
                 sessionId
             })
@@ -502,12 +541,14 @@ function addMessage(text, type, timestamp = null) {
         });
     }
     
-    // 添加到聊天历史（保存清理后的文本）
+    // 添加到聊天历史（使用标准的role格式，并包含时间戳）
     chatHistory.push({
-        text: safeText,
-        type: type,
-        timestamp: timestamp || new Date().toISOString()
+        role: type === 'user' ? 'user' : 'assistant',
+        content: safeText,
+        timestamp: timestamp || new Date()
     });
+    
+    // 注意：聊天记录现在由后端自动保存，无需前端手动保存
     
     scrollToBottom();
 }
@@ -515,30 +556,16 @@ function addMessage(text, type, timestamp = null) {
 // 格式化时间
 function formatTime(timestamp) {
     const date = new Date(timestamp);
-    const locale = currentLanguage === 'zh-CN' ? 'zh-CN' : 'en-US';
     
-    // 显示具体的日期时间
-    if (currentLanguage === 'zh-CN') {
-        return date.toLocaleString('zh-CN', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-        });
-    } else {
-        return date.toLocaleString('en-US', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        });
-    }
+    // 手动格式化为 YYYY-MM-DD HH:mm:ss 格式
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hour = String(date.getHours()).padStart(2, '0');
+    const minute = String(date.getMinutes()).padStart(2, '0');
+    const second = String(date.getSeconds()).padStart(2, '0');
+    
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 }
 
 // 滚动到底部
@@ -643,11 +670,16 @@ function exportChatHistory() {
         exportText += '=' .repeat(30) + '\n\n';
         
         chatHistory.forEach((message, index) => {
-            const time = formatTime(message.timestamp);
-            const sender = message.type === 'user' ? '用户' : '雾萌娘';
-            
-            exportText += `[${time}] ${sender}:\n`;
-            exportText += `${message.text}\n\n`;
+            // chatHistory使用{role, content, timestamp}格式
+            if (message.role === 'user') {
+                // 用户消息不需要时间戳，因为消息内容已包含用户名和时间戳
+                exportText += `${message.content || ''}\n\n`;
+            } else {
+                // AI消息需要添加时间戳，因为数据库中没有AI的时间戳
+                const time = formatTime(message.timestamp || new Date());
+                exportText += `${time} @FogMoeBot：\n`;
+                exportText += `${message.content || ''}\n\n`;
+            }
         });
         
         exportText += '=' .repeat(30) + '\n';
@@ -748,6 +780,9 @@ async function loadUserInfo() {
 }
 
 function displayUserInfo(user) {
+    // 存储用户信息到全局变量
+    currentUser = user;
+    
     if (userName && userCoins && userInfo) {
         userName.textContent = user.name || '用户';
         userCoins.textContent = user.coins || 0;
@@ -774,6 +809,9 @@ function initializeChatApp() {
     // 初始化单一对话模式
     currentChatId = 'single-chat';
     chatHistory = [];
+    
+    // 加载用户的聊天历史记录
+    loadChatHistory();
 }
 
 async function handleLogout() {
@@ -799,6 +837,141 @@ async function handleLogout() {
         // 静默处理登出错误
         showErrorModal('登出时发生错误，请稍后再试');
     }
+}
+
+// 加载用户聊天历史记录
+async function loadChatHistory() {
+    try {
+        // 使用用户ID作为conversation_id
+        const userId = getCurrentUserId();
+        if (!userId) {
+            return;
+        }
+        
+        const response = await fetch(`/api/chat-history/${userId}`, {
+            method: 'GET',
+            credentials: 'same-origin'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && data.messages && data.messages.length > 0) {
+            // 恢复聊天历史
+            chatHistory = data.messages;
+            
+            // 显示聊天界面
+            if (welcomeScreen) {
+                welcomeScreen.style.display = 'none';
+            }
+            if (chatMessages) {
+                chatMessages.style.display = 'flex';
+            }
+            
+            // 显示历史消息
+            displayChatHistory();
+            
+            console.log('聊天历史记录加载成功');
+        }
+    } catch (error) {
+        // 静默处理加载历史记录失败
+        console.error('加载聊天历史记录失败:', error);
+    }
+}
+
+// 保存聊天历史记录（已废弃，现在由后端自动处理）
+async function saveChatHistory() {
+    // 此函数已废弃，聊天记录现在由后端在处理消息时自动保存
+    // 保留此函数以避免破坏现有代码的兼容性
+    return;
+}
+
+// 显示聊天历史记录
+function displayChatHistory() {
+    if (!chatHistory || chatHistory.length === 0) {
+        return;
+    }
+    
+    chatHistory.forEach(message => {
+        if (message.role === 'user') {
+            displayMessage(message.content, 'user');
+        } else if (message.role === 'assistant') {
+            displayMessage(message.content, 'assistant');
+        }
+    });
+    
+    // 滚动到底部
+    scrollToBottom();
+}
+
+// 仅显示消息，不添加到chatHistory数组
+function displayMessage(text, type, timestamp = null) {
+    // 对于所有消息进行基本的安全清理
+    const safeText = typeof text === 'string' ? text : '';
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${type}`;
+    
+    const avatarDiv = document.createElement('div');
+    avatarDiv.className = 'message-avatar';
+    
+    if (type === 'user') {
+        avatarDiv.innerHTML = '<div class="avatar-icon"><i class="fas fa-user"></i></div>';
+    } else {
+        avatarDiv.innerHTML = '<div class="avatar-icon"><i class="fas fa-cloud"></i></div>';
+    }
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    
+    const textDiv = document.createElement('div');
+    textDiv.className = 'message-text';
+    // 渲染Markdown并清理HTML
+    textDiv.innerHTML = renderMarkdown(safeText);
+    
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'message-time';
+    timeDiv.textContent = formatTime(timestamp || new Date());
+    
+    contentDiv.appendChild(textDiv);
+    contentDiv.appendChild(timeDiv);
+    
+    // 为AI回复添加复制按钮在时间下方
+    if (type === 'assistant') {
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
+        copyBtn.title = '复制消息';
+        // 复制原始的markdown文本（但要确保安全）
+        const copyText = safeText.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/javascript:/gi, '');
+        copyBtn.addEventListener('click', () => copyMessage(copyText, copyBtn));
+        
+        contentDiv.appendChild(copyBtn);
+    }
+    
+    messageDiv.appendChild(avatarDiv);
+    messageDiv.appendChild(contentDiv);
+    
+    chatMessages.appendChild(messageDiv);
+    
+    // 高亮代码块（如果存在）
+    if (typeof hljs !== 'undefined') {
+        const codeBlocks = messageDiv.querySelectorAll('pre code');
+        codeBlocks.forEach(block => {
+            hljs.highlightElement(block);
+        });
+    }
+    
+    scrollToBottom();
+}
+
+// 获取当前用户ID
+function getCurrentUserId() {
+    // 从全局用户信息中获取用户ID
+    return currentUser ? currentUser.id : null;
 }
 
 // 页面加载时检查用户登录状态
