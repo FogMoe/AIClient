@@ -118,10 +118,14 @@ router.post('/', rateLimitMiddleware, async (req, res) => {
                 
                 // 只有在有有效消息时才保存
                 if (filteredNewMessages.length > 0) {
-                    // 异步保存聊天记录，不阻塞响应
-                    saveChatHistory(userId, filteredNewMessages).catch(error => {
-                        logger.error('保存聊天记录失败:', error.message);
-                    });
+                    // 立即保存聊天记录，等待完成而不是异步
+                    try {
+                        await saveChatHistory(userId, filteredNewMessages);
+                        logger.info(`用户 ${userId} 的聊天记录已保存，消息数量: ${filteredNewMessages.length}`);
+                    } catch (saveError) {
+                        logger.error('保存聊天记录失败:', saveError.message);
+                        // 保存失败不影响响应返回
+                    }
                 }
             } catch (error) {
                 logger.error('处理聊天记录保存时出错:', error.message);

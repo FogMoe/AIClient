@@ -214,13 +214,41 @@ let currentUser = null; // 存储当前用户信息
 // 缓存相关变量
 let chatHistoryCache = new Map(); // 缓存聊天历史
 let lastCacheTime = 0; // 上次缓存时间
-const CACHE_DURATION = 30000; // 缓存30秒
+const CACHE_DURATION = 60000; // 缓存60秒
 
 // 会话唯一ID
 let sessionId = localStorage.getItem('sessionId');
 if (!sessionId) {
     sessionId = 'sess-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
     localStorage.setItem('sessionId', sessionId);
+}
+
+// 添加本地存储聊天记录备份
+function backupChatHistoryToLocalStorage() {
+    try {
+        const userId = getCurrentUserId();
+        if (userId && chatHistory && chatHistory.length > 0) {
+            localStorage.setItem(`chat_backup_${userId}`, JSON.stringify(chatHistory));
+        }
+    } catch (error) {
+        console.error('备份聊天记录到本地存储失败:', error);
+    }
+}
+
+// 从本地存储恢复聊天记录备份
+function restoreChatHistoryFromLocalStorage() {
+    try {
+        const userId = getCurrentUserId();
+        if (userId) {
+            const backup = localStorage.getItem(`chat_backup_${userId}`);
+            if (backup) {
+                return JSON.parse(backup);
+            }
+        }
+    } catch (error) {
+        console.error('从本地存储恢复聊天记录失败:', error);
+    }
+    return null;
 }
 
 // 多语言函数
@@ -309,20 +337,10 @@ function initializeBaseEventListeners() {
         }
     });
     
-    // 页面重新获得焦点时重新加载聊天记录（带缓存优化）
+    // 页面重新获得焦点时重新加载聊天记录
     window.addEventListener('focus', () => {
         // 只有在用户已登录且聊天应用已初始化时才重新加载
         if (currentUser && chatHistory !== undefined) {
-            const now = Date.now();
-            const userId = getCurrentUserId();
-            const cacheKey = `chat_${userId}`;
-            
-            // 检查缓存是否有效（30秒内）
-            if (chatHistoryCache.has(cacheKey) && (now - lastCacheTime) < CACHE_DURATION) {
-                // 使用缓存，不访问数据库
-                return;
-            }
-            
             // 记录当前滚动位置
             const currentScrollTop = chatMessages ? chatMessages.scrollTop : 0;
             const currentScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
@@ -331,7 +349,37 @@ function initializeBaseEventListeners() {
             // 计算滚动位置比例（从底部开始计算）
             const scrollFromBottom = currentScrollHeight - currentScrollTop - currentClientHeight;
             
-            reloadChatHistory().then(() => {
+            // 先尝试从本地存储恢复最新的聊天记录
+            const localBackup = restoreChatHistoryFromLocalStorage();
+            if (localBackup && localBackup.length > 0) {
+                // 如果当前的聊天记录少于本地备份，使用本地备份
+                if (!chatHistory || chatHistory.length < localBackup.length) {
+                    chatHistory = localBackup;
+                    
+                    // 清空当前显示的消息
+                    if (chatMessages) {
+                        chatMessages.innerHTML = '';
+                    }
+                    
+                    // 重新显示聊天历史
+                    displayChatHistory(true);
+                    
+                    // 保持滚动位置
+                    if (chatMessages && scrollFromBottom >= 0) {
+                        setTimeout(() => {
+                            const newScrollHeight = chatMessages.scrollHeight;
+                            const newClientHeight = chatMessages.clientHeight;
+                            const newScrollTop = newScrollHeight - newClientHeight - scrollFromBottom;
+                            chatMessages.scrollTop = Math.max(0, newScrollTop);
+                        }, 10);
+                    }
+                    
+                    return;
+                }
+            }
+            
+            // 如果本地备份不可用或不完整，再尝试从服务器获取
+            reloadChatHistory(true).then(() => {
                 // 重新加载后恢复滚动位置
                 if (chatMessages && scrollFromBottom >= 0) {
                     // 使用setTimeout确保DOM已更新
@@ -343,6 +391,18 @@ function initializeBaseEventListeners() {
                     }, 10);
                 }
             });
+        }
+    });
+    
+    // 页面关闭或切换前备份聊天记录
+    window.addEventListener('beforeunload', () => {
+        backupChatHistoryToLocalStorage();
+    });
+    
+    // 页面可见性变化时备份聊天记录
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            backupChatHistoryToLocalStorage();
         }
     });
 }
@@ -413,6 +473,9 @@ async function startNewChat() {
                 const cacheKey = `chat_${userId}`;
                 chatHistoryCache.delete(cacheKey);
                 lastCacheTime = 0;
+                
+                // 清除本地存储的备份
+                localStorage.removeItem(`chat_backup_${userId}`);
             }
 
             // 清空前端聊天记录和界面
@@ -512,6 +575,9 @@ async function handleSubmit(e) {
         // 添加AI回复
         addMessage(data.response, 'assistant');
         
+        // 备份聊天记录到本地存储
+        backupChatHistoryToLocalStorage();
+        
         // 更新聊天列表
         updateChatList();
         
@@ -603,14 +669,6 @@ function addMessage(text, type, timestamp = null) {
     
     chatMessages.appendChild(messageDiv);
     
-    // 高亮代码块（如果存在）
-    if (typeof hljs !== 'undefined') {
-        const codeBlocks = messageDiv.querySelectorAll('pre code');
-        codeBlocks.forEach(block => {
-            hljs.highlightElement(block);
-        });
-    }
-    
     // 添加到聊天历史（使用标准的role格式，并包含时间戳）
     chatHistory.push({
         role: type === 'user' ? 'user' : 'assistant',
@@ -618,7 +676,8 @@ function addMessage(text, type, timestamp = null) {
         timestamp: timestamp || new Date()
     });
     
-    // 注意：聊天记录现在由后端自动保存，无需前端手动保存
+    // 更新本地备份
+    backupChatHistoryToLocalStorage();
     
     scrollToBottom();
 }
@@ -993,13 +1052,10 @@ async function loadChatHistory() {
             return;
         }
         
-        const now = Date.now();
-        const cacheKey = `chat_${userId}`;
-        
-        // 检查缓存是否有效
-        if (chatHistoryCache.has(cacheKey) && (now - lastCacheTime) < CACHE_DURATION) {
-            const cachedData = chatHistoryCache.get(cacheKey);
-            chatHistory = cachedData;
+        // 首先尝试从本地存储恢复
+        const localBackup = restoreChatHistoryFromLocalStorage();
+        if (localBackup && localBackup.length > 0) {
+            chatHistory = localBackup;
             
             // 显示聊天界面
             if (welcomeScreen) {
@@ -1009,13 +1065,28 @@ async function loadChatHistory() {
                 chatMessages.style.display = 'flex';
             }
             
-            // 显示历史消息（初次加载时滚动到底部）
+            // 显示历史消息
             displayChatHistory(false);
             
-            console.log('聊天历史记录从缓存加载成功');
+            console.log('聊天历史记录从本地存储加载成功');
+            
+            // 后台仍然从服务器获取最新记录进行验证
+            fetchServerChatHistory(userId);
             return;
         }
         
+        // 如果本地存储中没有记录，则从服务器获取
+        await fetchServerChatHistory(userId);
+        
+    } catch (error) {
+        console.error('加载聊天历史记录失败:', error);
+        // 静默处理加载历史记录失败
+    }
+}
+
+// 从服务器获取聊天历史
+async function fetchServerChatHistory(userId) {
+    try {
         const response = await fetch(`/api/chat-history/${userId}`, {
             method: 'GET',
             credentials: 'same-origin'
@@ -1028,32 +1099,40 @@ async function loadChatHistory() {
         const data = await response.json();
         
         if (data.success && data.messages && data.messages.length > 0) {
-            // 恢复聊天历史
-            chatHistory = data.messages;
-            
-            // 更新缓存
-            chatHistoryCache.set(cacheKey, data.messages);
-            lastCacheTime = now;
-            
-            // 显示聊天界面
-            if (welcomeScreen) {
-                welcomeScreen.style.display = 'none';
+            // 如果本地记录比服务器记录少，则使用服务器记录
+            if (!chatHistory || chatHistory.length < data.messages.length) {
+                // 恢复聊天历史
+                chatHistory = data.messages;
+                
+                // 更新本地备份
+                backupChatHistoryToLocalStorage();
+                
+                // 更新缓存
+                const cacheKey = `chat_${userId}`;
+                chatHistoryCache.set(cacheKey, data.messages);
+                lastCacheTime = Date.now();
+                
+                // 显示聊天界面
+                if (welcomeScreen) {
+                    welcomeScreen.style.display = 'none';
+                }
+                if (chatMessages) {
+                    chatMessages.style.display = 'flex';
+                    chatMessages.innerHTML = ''; // 清空当前显示
+                }
+                
+                // 显示历史消息
+                displayChatHistory(false);
+                
+                console.log('聊天历史记录从服务器加载成功');
             }
-            if (chatMessages) {
-                chatMessages.style.display = 'flex';
-            }
-            
-            // 显示历史消息（初次加载时滚动到底部）
-            displayChatHistory(false);
-            
-            console.log('聊天历史记录加载成功');
         }
     } catch (error) {
-        // 静默处理加载历史记录失败
+        console.error('从服务器获取聊天历史失败:', error);
     }
 }
 
-// 重新加载聊天历史记录（用于消息发送后同步）
+// 重新加载聊天历史记录（用于消息发送后同步或页面焦点变化时）
 async function reloadChatHistory(preserveScrollPosition = false) {
     try {
         // 使用用户ID作为conversation_id
@@ -1062,13 +1141,11 @@ async function reloadChatHistory(preserveScrollPosition = false) {
             return;
         }
         
-        const now = Date.now();
-        const cacheKey = `chat_${userId}`;
-        
-        // 检查缓存是否有效
-        if (chatHistoryCache.has(cacheKey) && (now - lastCacheTime) < CACHE_DURATION) {
-            const cachedData = chatHistoryCache.get(cacheKey);
-            chatHistory = cachedData;
+        // 检查本地备份是否比当前记录更新
+        const localBackup = restoreChatHistoryFromLocalStorage();
+        if (localBackup && localBackup.length > chatHistory.length) {
+            // 本地备份比当前记录更新，使用本地备份
+            chatHistory = localBackup;
             
             // 清空当前显示的消息
             if (chatMessages) {
@@ -1080,6 +1157,7 @@ async function reloadChatHistory(preserveScrollPosition = false) {
             return;
         }
         
+        // 如果本地备份不比当前记录更新，再从服务器获取
         const response = await fetch(`/api/chat-history/${userId}`, {
             method: 'GET',
             credentials: 'same-origin'
@@ -1091,7 +1169,8 @@ async function reloadChatHistory(preserveScrollPosition = false) {
         
         const data = await response.json();
         
-        if (data.success && data.messages && data.messages.length > 0) {
+        // 只有当服务器返回的记录比当前记录长时才更新
+        if (data.success && data.messages && data.messages.length > chatHistory.length) {
             // 清空当前显示的消息
             if (chatMessages) {
                 chatMessages.innerHTML = '';
@@ -1100,23 +1179,28 @@ async function reloadChatHistory(preserveScrollPosition = false) {
             // 更新聊天历史
             chatHistory = data.messages;
             
+            // 更新本地备份
+            backupChatHistoryToLocalStorage();
+            
             // 更新缓存
+            const cacheKey = `chat_${userId}`;
             chatHistoryCache.set(cacheKey, data.messages);
-            lastCacheTime = now;
+            lastCacheTime = Date.now();
             
             // 重新显示历史消息，传递是否保持滚动位置的参数
             displayChatHistory(preserveScrollPosition);
-        
         }
     } catch (error) {
+        console.error('重新加载聊天历史记录失败:', error);
         // 静默处理重新加载历史记录失败
     }
 }
 
-// 保存聊天历史记录（已废弃，现在由后端自动处理）
+// 保存聊天历史记录（已废弃，现在由后端自动处理，但保留前端本地备份功能）
 async function saveChatHistory() {
     // 此函数已废弃，聊天记录现在由后端在处理消息时自动保存
-    // 保留此函数以避免破坏现有代码的兼容性
+    // 但我们仍然备份到本地存储
+    backupChatHistoryToLocalStorage();
     return;
 }
 
