@@ -307,12 +307,6 @@
         let turnstileEnabled = false;
         let turnstileSiteKey = '';        // Turnstile初始化函数
         function initializeTurnstile() {
-            console.log('初始化Turnstile:', { 
-                enabled: turnstileEnabled, 
-                siteKey: turnstileSiteKey ? '已配置' : '未配置', 
-                siteKeyType: typeof turnstileSiteKey,
-                turnstileAPI: !!window.turnstile 
-            });
               if (turnstileEnabled && turnstileSiteKey && window.turnstile) {
                 // 先清除现有的小部件
                 const turnstileWidget = document.getElementById('turnstile-container');
@@ -321,55 +315,36 @@
                     
                     try {
                         // 渲染Turnstile小部件
-                        console.log('开始渲染Turnstile小部件...');
                         // 确保sitekey是字符串类型，并验证格式
                         const sitekey = String(turnstileSiteKey).trim();
                         
                         if (!sitekey || sitekey === 'undefined' || sitekey === 'null') {
-                            console.error('无效的sitekey:', sitekey);
                             return;
                         }
-                        
-                        console.log('使用sitekey渲染:', sitekey.substring(0, 8) + '...');
-                        
+                                            
                         window.turnstile.render(turnstileWidget, {
                             sitekey: sitekey,
                             theme: 'light',
                             size: 'normal',
                             callback: function(token) {
                                 turnstileToken = token;
-                                console.log('Turnstile验证成功, token:', token.substring(0, 20) + '...');
                             },
                             'error-callback': function() {
-                                console.error('Turnstile验证出错');
                                 turnstileToken = null;
                             },
                             'expired-callback': function() {
-                                console.log('Turnstile验证已过期');
                                 turnstileToken = null;
                             }
                         });
-                        console.log('Turnstile小部件渲染完成');
                     } catch (error) {
-                        console.error('Turnstile渲染失败:', error);
                     }
-                } else {
-                    console.error('找不到Turnstile容器元素');
                 }
             } else if (!turnstileEnabled) {
-                console.log('Turnstile未启用，隐藏小部件');
                 // 如果未启用Turnstile，隐藏小部件
                 const turnstileContainer = document.querySelector('.turnstile-widget');
                 if (turnstileContainer) {
                     turnstileContainer.style.display = 'none';
                 }
-            } else {
-                console.warn('Turnstile初始化条件不满足:', {
-                    enabled: turnstileEnabled,
-                    siteKey: !!turnstileSiteKey,
-                    siteKeyType: typeof turnstileSiteKey,
-                    api: !!window.turnstile
-                });
             }
         }// 从服务器获取Turnstile配置
         fetch('/api/turnstile-config')
@@ -380,22 +355,14 @@
                 
                 // 确保siteKey是字符串
                 if (typeof turnstileSiteKey !== 'string') {
-                    console.error('Turnstile siteKey类型错误:', typeof turnstileSiteKey);
                     turnstileSiteKey = String(turnstileSiteKey);
                 }
-                  console.log('Turnstile配置获取成功:', { 
-                    enabled: turnstileEnabled, 
-                    siteKey: turnstileSiteKey ? 'key-exists' : 'missing-key',
-                    siteKeyType: typeof turnstileSiteKey
-                });
                 
                 // 等待Turnstile脚本加载完成
                 function waitForTurnstile() {
                     if (window.turnstile) {
-                        console.log('Turnstile API已加载');
                         initializeTurnstile();
                     } else {
-                        console.log('等待Turnstile API加载...');
                         setTimeout(waitForTurnstile, 100);
                     }
                 }
@@ -409,7 +376,6 @@
                 }
             })
             .catch((error) => {
-                console.error('获取Turnstile配置失败:', error);
                 // 如果无法获取配置，隐藏Turnstile小部件
                 const turnstileContainer = document.querySelector('.turnstile-widget');
                 if (turnstileContainer) {
