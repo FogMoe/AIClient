@@ -228,10 +228,14 @@ function backupChatHistoryToLocalStorage() {
     try {
         const userId = getCurrentUserId();
         if (userId && chatHistory && chatHistory.length > 0) {
-            localStorage.setItem(`chat_backup_${userId}`, JSON.stringify(chatHistory));
+            const data = {
+                messages: chatHistory,
+                expireAt: Date.now() + 60000 // 1分钟后过期
+            };
+            localStorage.setItem(`chat_backup_${userId}`, JSON.stringify(data));
         }
     } catch (error) {
-        console.error('备份聊天记录到本地存储失败:', error);
+        
     }
 }
 
@@ -242,11 +246,30 @@ function restoreChatHistoryFromLocalStorage() {
         if (userId) {
             const backup = localStorage.getItem(`chat_backup_${userId}`);
             if (backup) {
-                return JSON.parse(backup);
+                try {
+                    const data = JSON.parse(backup);
+                    
+                    // 检查是否有过期时间
+                    if (data.expireAt) {
+                        // 如果已过期，删除并返回null
+                        if (data.expireAt < Date.now()) {
+                            
+                            localStorage.removeItem(`chat_backup_${userId}`);
+                            return null;
+                        }
+                        return data.messages;
+                    } else if (Array.isArray(data)) {
+                        // 兼容旧格式（没有过期时间的数组格式）
+                        return data;
+                    }
+                } catch (parseError) {
+                   
+                    localStorage.removeItem(`chat_backup_${userId}`);
+                }
             }
         }
     } catch (error) {
-        console.error('从本地存储恢复聊天记录失败:', error);
+       
     }
     return null;
 }
@@ -341,13 +364,11 @@ function initializeBaseEventListeners() {
     window.addEventListener('focus', () => {
         // 只有在用户已登录且聊天应用已初始化时才重新加载
         if (currentUser && chatHistory !== undefined) {
-            // 记录当前滚动位置
+            // 检查用户是否在底部或接近底部（50px误差范围）
             const currentScrollTop = chatMessages ? chatMessages.scrollTop : 0;
             const currentScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
             const currentClientHeight = chatMessages ? chatMessages.clientHeight : 0;
-            
-            // 计算滚动位置比例（从底部开始计算）
-            const scrollFromBottom = currentScrollHeight - currentScrollTop - currentClientHeight;
+            const isNearBottom = currentScrollHeight - currentScrollTop <= currentClientHeight + 50;
             
             // 先尝试从本地存储恢复最新的聊天记录
             const localBackup = restoreChatHistoryFromLocalStorage();
@@ -364,14 +385,9 @@ function initializeBaseEventListeners() {
                     // 重新显示聊天历史
                     displayChatHistory(true);
                     
-                    // 保持滚动位置
-                    if (chatMessages && scrollFromBottom >= 0) {
-                        setTimeout(() => {
-                            const newScrollHeight = chatMessages.scrollHeight;
-                            const newClientHeight = chatMessages.clientHeight;
-                            const newScrollTop = newScrollHeight - newClientHeight - scrollFromBottom;
-                            chatMessages.scrollTop = Math.max(0, newScrollTop);
-                        }, 10);
+                    // 如果用户之前接近底部，则滚动到底部
+                    if (isNearBottom) {
+                        scrollToBottom();
                     }
                     
                     return;
@@ -380,15 +396,9 @@ function initializeBaseEventListeners() {
             
             // 如果本地备份不可用或不完整，再尝试从服务器获取
             reloadChatHistory(true).then(() => {
-                // 重新加载后恢复滚动位置
-                if (chatMessages && scrollFromBottom >= 0) {
-                    // 使用setTimeout确保DOM已更新
-                    setTimeout(() => {
-                        const newScrollHeight = chatMessages.scrollHeight;
-                        const newClientHeight = chatMessages.clientHeight;
-                        const newScrollTop = newScrollHeight - newClientHeight - scrollFromBottom;
-                        chatMessages.scrollTop = Math.max(0, newScrollTop);
-                    }, 10);
+                // 如果用户之前接近底部，则滚动到底部
+                if (isNearBottom) {
+                    scrollToBottom();
                 }
             });
         }
@@ -667,6 +677,12 @@ function addMessage(text, type, timestamp = null) {
     messageDiv.appendChild(avatarDiv);
     messageDiv.appendChild(contentDiv);
     
+    // 在添加新消息前检查用户是否在底部或接近底部
+    const currentScrollTop = chatMessages ? chatMessages.scrollTop : 0;
+    const currentScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
+    const currentClientHeight = chatMessages ? chatMessages.clientHeight : 0;
+    const isNearBottom = currentScrollHeight - currentScrollTop <= currentClientHeight + 50;
+    
     chatMessages.appendChild(messageDiv);
     
     // 添加到聊天历史（使用标准的role格式，并包含时间戳）
@@ -679,7 +695,10 @@ function addMessage(text, type, timestamp = null) {
     // 更新本地备份
     backupChatHistoryToLocalStorage();
     
-    scrollToBottom();
+    // 如果用户之前接近底部，则滚动到底部
+    if (isNearBottom) {
+        scrollToBottom();
+    }
 }
 
 // 格式化时间
@@ -856,7 +875,7 @@ function debounce(func, wait) {
 
 // 导出聊天历史记录功能
 function exportChatHistory() {
-    if (chatHistory.length === 0) {
+    if (!chatHistory || chatHistory.length === 0) {
         showErrorModal('当前没有聊天记录可以导出。');
         return;
     }
@@ -869,16 +888,43 @@ function exportChatHistory() {
         exportText += `消息总数: ${chatHistory.length}\n`;
         exportText += '=' .repeat(30) + '\n\n';
         
+        let lastUserTimestamp = null;
+        
         chatHistory.forEach((message, index) => {
             // chatHistory使用{role, content, timestamp}格式
             if (message.role === 'user') {
-                // 用户消息不需要时间戳，因为消息内容已包含用户名和时间戳
-                exportText += `${message.content || ''}\n\n`;
-            } else {
-                // AI消息需要添加时间戳，因为数据库中没有AI的时间戳
-                const time = formatTime(message.timestamp || new Date());
-                exportText += `${time} @FogMoeBot：\n`;
-                exportText += `${message.content || ''}\n\n`;
+                // 解析用户消息中的时间戳信息
+                let userContent = message.content;
+                let extractedTimestamp = null;
+                
+                // 匹配格式：YYYY-MM-DD HH:mm:ss @用户名 说：\n
+                const prefixPattern = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) @(.+?) 说：\n/;
+                const match = userContent.match(prefixPattern);
+                
+                if (match) {
+                    extractedTimestamp = match[1];
+                    const extractedUsername = match[2];
+                    userContent = userContent.replace(prefixPattern, '');
+                    
+                    // 添加标准格式的用户消息
+                    exportText += `${extractedTimestamp} @${extractedUsername} 说：\n${userContent}\n\n`;
+                    lastUserTimestamp = extractedTimestamp;
+                } else {
+                    // 如果消息中没有时间戳，使用消息对象的timestamp或当前时间
+                    const time = formatTime(message.timestamp || new Date());
+                    const username = currentUser ? currentUser.name : '用户';
+                    exportText += `${time} @${username} 说：\n${userContent}\n\n`;
+                    lastUserTimestamp = time;
+                }
+            } else if (message.role === 'assistant') {
+                // AI消息使用用户消息的时间戳或消息对象自身的时间戳
+                let time;
+                if (lastUserTimestamp) {
+                    time = lastUserTimestamp;
+                } else {
+                    time = formatTime(message.timestamp || new Date());
+                }
+                exportText += `${time} @FogMoeBot：\n${message.content || ''}\n\n`;
             }
         });
         
@@ -904,8 +950,6 @@ function exportChatHistory() {
         
         // 清理URL对象
         window.URL.revokeObjectURL(url);
-        
-        // 导出成功后静默处理
         
     } catch (error) {
         // 静默处理导出错误
@@ -1068,7 +1112,7 @@ async function loadChatHistory() {
             // 显示历史消息
             displayChatHistory(false);
             
-            console.log('聊天历史记录从本地存储加载成功');
+            
             
             // 后台仍然从服务器获取最新记录进行验证
             fetchServerChatHistory(userId);
@@ -1079,7 +1123,7 @@ async function loadChatHistory() {
         await fetchServerChatHistory(userId);
         
     } catch (error) {
-        console.error('加载聊天历史记录失败:', error);
+        
         // 静默处理加载历史记录失败
     }
 }
@@ -1124,11 +1168,11 @@ async function fetchServerChatHistory(userId) {
                 // 显示历史消息
                 displayChatHistory(false);
                 
-                console.log('聊天历史记录从服务器加载成功');
+                
             }
         }
     } catch (error) {
-        console.error('从服务器获取聊天历史失败:', error);
+        
     }
 }
 
@@ -1140,6 +1184,12 @@ async function reloadChatHistory(preserveScrollPosition = false) {
         if (!userId) {
             return;
         }
+        
+        // 检查用户是否在底部或接近底部（50px误差范围）
+        const currentScrollTop = chatMessages ? chatMessages.scrollTop : 0;
+        const currentScrollHeight = chatMessages ? chatMessages.scrollHeight : 0;
+        const currentClientHeight = chatMessages ? chatMessages.clientHeight : 0;
+        const isNearBottom = currentScrollHeight - currentScrollTop <= currentClientHeight + 50;
         
         // 检查本地备份是否比当前记录更新
         const localBackup = restoreChatHistoryFromLocalStorage();
@@ -1154,6 +1204,12 @@ async function reloadChatHistory(preserveScrollPosition = false) {
             
             // 重新显示聊天历史
             displayChatHistory(preserveScrollPosition);
+            
+            // 如果用户之前接近底部，或者不需要保持滚动位置，则滚动到底部
+            if (isNearBottom || !preserveScrollPosition) {
+                scrollToBottom();
+            }
+            
             return;
         }
         
@@ -1187,11 +1243,16 @@ async function reloadChatHistory(preserveScrollPosition = false) {
             chatHistoryCache.set(cacheKey, data.messages);
             lastCacheTime = Date.now();
             
-            // 重新显示历史消息，传递是否保持滚动位置的参数
+            // 重新显示历史消息
             displayChatHistory(preserveScrollPosition);
+            
+            // 如果用户之前接近底部，或者不需要保持滚动位置，则滚动到底部
+            if (isNearBottom || !preserveScrollPosition) {
+                scrollToBottom();
+            }
         }
     } catch (error) {
-        console.error('重新加载聊天历史记录失败:', error);
+        
         // 静默处理重新加载历史记录失败
     }
 }
