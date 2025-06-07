@@ -13,7 +13,7 @@ module.exports = {
         apiKey: process.env.AZURE_OPENAI_API_KEY || "<REPLACE_WITH_YOUR_KEY_VALUE_HERE>",
         apiVersion: "2025-01-01-preview",
         deployment: "gpt-4",
-        maxTokens: 1000,
+        maxTokens: 5000,
         temperature: 1.0
     },
       // 频率限制配置
