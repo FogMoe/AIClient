@@ -1100,10 +1100,7 @@ function smoothRedirectToLogin() {
 // 用户信息管理
 async function loadUserInfo() {
     try {
-        const response = await fetch('/auth/status', {
-            method: 'GET',
-            credentials: 'same-origin'
-        });
+        const response = await fetchWithTimeout('/auth/status', { method: 'GET' }, 8000);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
@@ -1167,18 +1164,8 @@ function initializeChatApp() {
     // 加载用户的聊天历史记录
     loadChatHistory();
     
-    // 设置定时同步聊天记录（每分钟检查一次）
-    setInterval(() => {
-        // 只在用户未输入时进行同步
-        if (!isUserTyping && currentUser) {
-            const userId = getCurrentUserId();
-            if (userId) {
-                // 静默同步，不强制，遵循频率限制
-                reloadChatHistory(true, false).catch(err => {
-                });
-            }
-        }
-    }, CHAT_SYNC_INTERVAL);
+    // 启动聊天同步定时器
+    startChatSync();
 }
 
 async function handleLogout() {
@@ -1566,7 +1553,7 @@ document.addEventListener('DOMContentLoaded', () => {
 async function refreshLotteryStatus() {
     if (!lotteryBtn) return;
     try {
-        const res = await fetch('/api/lottery/status');
+        const res = await fetchWithTimeout('/api/lottery/status', {}, 8000);
         const data = await res.json();
         lotteryBtn.disabled = !data.canDraw;
         if (!data.canDraw) {
@@ -1579,3 +1566,61 @@ async function refreshLotteryStatus() {
         lotteryBtn.disabled = true;
     }
 }
+
+/* ------------------------------------------------------------------
+ * 网络工具：带超时的 fetch
+ * ------------------------------------------------------------------ */
+const activeFetchControllers = new Set();
+function fetchWithTimeout(url, options = {}, timeout = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    activeFetchControllers.add(controller);
+    const opts = { ...options, signal: controller.signal, credentials: options.credentials || 'same-origin' };
+    return fetch(url, opts)
+        .finally(() => {
+            clearTimeout(timer);
+            activeFetchControllers.delete(controller);
+        });
+}
+
+/* ------------------------------------------------------------------
+ * 轮询控制：在后台暂停，前台恢复
+ * ------------------------------------------------------------------ */
+let chatSyncIntervalId = null;
+function startChatSync() {
+    if (chatSyncIntervalId) return;
+    chatSyncIntervalId = setInterval(() => {
+        if (!isUserTyping && currentUser) {
+            reloadChatHistory(true, false).catch(() => {});
+        }
+    }, CHAT_SYNC_INTERVAL);
+}
+
+function stopChatSync() {
+    if (chatSyncIntervalId) {
+        clearInterval(chatSyncIntervalId);
+        chatSyncIntervalId = null;
+    }
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        // 页面进入后台：停止轮询并中断悬挂请求
+        stopChatSync();
+        activeFetchControllers.forEach(ctrl => ctrl.abort());
+    } else {
+        // 回到前台：重新获取状态并恢复轮询
+        loadUserInfo();
+        refreshLotteryStatus();
+        startChatSync();
+    }
+});
+
+window.addEventListener('focus', () => {
+    // 某些浏览器不会触发 visibilitychange，可在获取焦点时再保险
+    if (!document.hidden) {
+        loadUserInfo();
+        refreshLotteryStatus();
+        startChatSync();
+    }
+});
