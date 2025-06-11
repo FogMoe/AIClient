@@ -8,7 +8,6 @@
 /* ===== 兼容多种视口单位，确保移动端全屏 ===== */
 html, body {
     height: 100vh; /* 回退值，所有浏览器皆支持 */
-    overflow: hidden;
 }
 
 @supports (height: 100svh) {
