@@ -955,6 +955,8 @@ body {
 @media (max-width: 768px) {
     .app-container {
         flex-direction: column;
+        height: 100vh; /* 确保在移动端占满屏幕 */
+        height: 100dvh; /* 使用动态视口高度 */
     }
 
     .sidebar {
@@ -962,6 +964,17 @@ body {
         height: auto;
         border-right: none;
         border-bottom: 1px solid #e1e1e1;
+        flex-shrink: 0; /* 防止侧边栏被压缩 */
+    }
+
+    .main-content {
+        flex: 1;
+        min-height: 0; /* 确保可以收缩 */
+        overflow: hidden; /* 防止内容溢出 */
+    }
+
+    .chat-container {
+        height: 100%; /* 确保聊天容器占满剩余空间 */
     }
 
     .sidebar-header {
@@ -982,10 +995,14 @@ body {
 
     .chat-messages {
         padding: 20px 16px;
+        flex: 1;
+        overflow-y: auto; /* 确保可以滚动 */
+        -webkit-overflow-scrolling: touch; /* iOS平滑滚动 */
     }
 
     .input-area {
         padding: 16px;
+        flex-shrink: 0; /* 防止输入区域被压缩 */
     }
 
     .message {
@@ -1006,6 +1023,11 @@ body {
 }
 
 @media (max-width: 480px) {
+    .app-container {
+        height: 100vh; /* 确保在小屏幕设备上占满屏幕 */
+        height: 100dvh; /* 使用动态视口高度 */
+    }
+
     .sidebar-header {
         flex-direction: column;
         gap: 12px;
@@ -1030,10 +1052,13 @@ body {
 
     .chat-messages {
         padding: 16px 12px;
+        overflow-y: auto; /* 确保可以滚动 */
+        -webkit-overflow-scrolling: touch; /* iOS平滑滚动 */
     }
 
     .input-area {
         padding: 12px;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom)); /* 适配安全区域 */
     }
 
     .input-container {
