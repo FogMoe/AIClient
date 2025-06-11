@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
-const { validateLogin, getUserById } = require('../config/database');
+const { validateLogin, getUserById, isUsernameTaken, createWebUser } = require('../config/database');
 const { logger } = require('../utils/logger');
 const { handleUnauthorized } = require('../utils/errorHandler');
 const { verifyTurnstile } = require('../utils/turnstile');
@@ -36,6 +36,83 @@ router.get('/login', (req, res) => {
         return res.redirect('/');
     }
     res.sendFile('login.html', { root: './public' });
+});
+
+// 生成数学验证码
+function createMathCaptcha() {
+    const a = Math.floor(Math.random() * 10) + 1; // 1-10
+    const b = Math.floor(Math.random() * 10) + 1;
+    return { question: `${a} + ${b} = ?`, answer: a + b };
+}
+
+// 提供验证码题目
+router.get('/math-captcha', (req, res) => {
+    const { question, answer } = createMathCaptcha();
+    req.session.captchaAnswer = answer;
+    res.json({ question });
+});
+
+// 注册页面
+router.get('/register', (req, res) => {
+    if (req.session.user) {
+        return res.redirect('/');
+    }
+    res.sendFile('register.html', { root: './public' });
+});
+
+// 处理注册请求
+router.post('/register', async (req, res) => {
+    try {
+        const { username, password, confirmPassword, captcha } = req.body;
+
+        // 输入非空检查
+        if (!username || !password || !confirmPassword) {
+            return res.status(400).json({ success: false, message: '请填写完整信息' });
+        }
+
+        // 用户名格式：3-20 位，仅字母数字下划线
+        const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
+        if (!usernameRegex.test(username)) {
+            return res.status(400).json({ success: false, message: '用户名需为 3-20 位字母、数字或下划线' });
+        }
+
+        // 密码格式：6-20 位，需同时包含字母和数字
+        const passwordRegex = /^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9]{6,20}$/;
+        if (!passwordRegex.test(password)) {
+            return res.status(400).json({ success: false, message: '密码需为 6-20 位且同时包含字母和数字' });
+        }
+
+        // 确认密码
+        if (password !== confirmPassword) {
+            return res.status(400).json({ success: false, message: '两次输入的密码不一致' });
+        }
+
+        // 校验验证码
+        const expected = req.session.captchaAnswer;
+        if (typeof expected === 'undefined' || parseInt(captcha, 10) !== expected) {
+            return res.status(400).json({ success: false, message: '验证码错误，请重试' });
+        }
+
+        // 清除验证码，防止复用
+        delete req.session.captchaAnswer;
+
+        // 检查用户名是否被占用
+        const taken = await isUsernameTaken(username);
+        if (taken) {
+            return res.status(409).json({ success: false, message: '用户名已存在' });
+        }
+
+        // 哈希密码
+        const hashedPassword = hashPassword(password);
+
+        // 创建用户
+        const newUserId = await createWebUser(username, hashedPassword);
+
+        return res.json({ success: true, message: '注册成功，请登录', userId: newUserId });
+    } catch (error) {
+        logger.error('注册错误:', error.message || error);
+        return res.status(500).json({ success: false, message: '注册失败，请稍后重试' });
+    }
 });
 
 // 处理登录请求

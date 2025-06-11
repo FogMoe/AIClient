@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册 - 雾萌娘</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="AI人工智能聊天助手">
+    <meta name="keywords" content="AI,雾萌娘,AI助手,人工智能,聊天机器人,智能对话,雾萌AI,AI chat,artificial intelligence,fogmoe">
+    <meta name="author" content="FOGMOE">
+    <meta name="language" content="zh-CN">
+    
+    <!-- Favicons -->
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    
+    <!-- CSS and External Resources -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- 复用登录页的内联样式 -->
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;
+            background:#f5f5f5;
+            min-height:100vh;
+            display:flex; align-items:center; justify-content:center;
+            padding:20px; color:#333;
+        }
+        .login-container{background:#fff;border-radius:12px;padding:40px;width:100%;max-width:420px;box-shadow:0 0 20px rgba(0,0,0,.1);border:1px solid #e1e1e1;}
+        .login-header{text-align:center;margin-bottom:30px;}
+        .login-title{font-size:28px;font-weight:600;color:#333;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:12px;}
+        .login-icon{width:32px;height:32px;background:linear-gradient(45deg,#0078d4,#00bcf2);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;flex-shrink:0;}
+        .login-subtitle{color:#666;font-size:16px;font-weight:300;}
+        .form-group{margin-bottom:20px;}
+        .form-label{display:block;margin-bottom:8px;font-weight:600;color:#333;font-size:14px;}
+        .form-input{width:100%;padding:12px 16px;border:1px solid #e1e1e1;border-radius:6px;font-size:16px;transition:all .2s ease;background:#fff;}
+        .form-input:focus{outline:none;border-color:#0078d4;box-shadow:0 0 0 3px rgba(0,120,212,.1);}
+        .login-button{width:100%;padding:14px;background:#0078d4;color:#fff;border:none;border-radius:6px;font-size:16px;font-weight:600;cursor:pointer;transition:all .2s ease;margin-bottom:20px;}
+        .login-button:hover{background:#106ebe;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,120,212,.2);}
+        .login-button:disabled{opacity:.6;cursor:not-allowed;transform:none;background:#0078d4;}
+        .register-info{text-align:center;padding:16px;background:#fafafa;border-radius:6px;margin-top:20px;border:1px solid #e1e1e1;}
+        .register-text{color:#666;font-size:14px;margin-bottom:10px;}
+        .register-link{display:inline-flex;align-items:center;gap:8px;color:#0078d4;text-decoration:none;font-weight:600;font-size:14px;padding:8px 16px;background:rgba(0,120,212,.1);border-radius:6px;transition:all .2s ease;}
+        .register-link:hover{background:rgba(0,120,212,.15);transform:translateY(-1px);}
+        .error-message{background:#fef7f7;color:#d63031;padding:12px 16px;border-radius:6px;margin-bottom:20px;border:1px solid #feb2b2;font-size:14px;}
+        .success-message{background:#f7fef7;color:#00b894;padding:12px 16px;border-radius:6px;margin-bottom:20px;border:1px solid #b2f5ea;font-size:14px;}
+        .loading{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-radius:50%;border-top-color:#fff;animation:spin 1s ease-in-out infinite;}
+        @keyframes spin{to{transform:rotate(360deg)}}
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <div class="login-title">
+                <div class="login-icon"><i class="fas fa-cloud"></i></div>
+                雾萌娘
+            </div>
+            <div class="login-subtitle">创建您的账号</div>
+        </div>
+
+        <div id="messageContainer"></div>
+
+        <form id="registerForm">
+            <div class="form-group">
+                <label class="form-label" for="username">用户名</label>
+                <input class="form-input" type="text" id="username" name="username" placeholder="3-20位字母、数字或下划线" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="password">密码</label>
+                <input class="form-input" type="password" id="password" name="password" placeholder="6-20位，包含字母和数字" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="confirmPassword">确认密码</label>
+                <input class="form-input" type="password" id="confirmPassword" name="confirmPassword" placeholder="再次输入密码" required>
+            </div>
+            <div class="form-group" id="captchaGroup" style="display:none;">
+                <label class="form-label" for="captchaInput">验证：<span id="captchaQuestion"></span></label>
+                <input class="form-input" type="text" id="captchaInput" name="captcha" placeholder="请输入答案" required>
+                <a id="reloadCaptcha" style="font-size:12px;color:#0078d4;cursor:pointer;margin-top:4px;display:inline-block;">换一题</a>
+            </div>
+            <button class="login-button" type="submit" id="registerBtn">
+                <span id="registerText">注册</span>
+                <span class="loading" id="registerSpinner" style="display:none;"></span>
+            </button>
+        </form>
+
+        <div class="register-info">
+            <div class="register-text">已有账号？</div>
+            <a class="register-link" href="/auth/login"><i class="fas fa-sign-in-alt"></i> 去登录</a>
+        </div>
+    </div>
+
+    <script>
+        const registerForm = document.getElementById('registerForm');
+        const registerBtn = document.getElementById('registerBtn');
+        const registerText = document.getElementById('registerText');
+        const registerSpinner = document.getElementById('registerSpinner');
+        const messageContainer = document.getElementById('messageContainer');
+        let messageTimeout = null;
+
+        function showMessage(message, type = 'error') {
+            if (!messageContainer) return;
+            if (messageTimeout) clearTimeout(messageTimeout);
+            messageContainer.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = `${type}-message`;
+            div.textContent = message;
+            messageContainer.appendChild(div);
+            if (type === 'success') {
+                messageTimeout = setTimeout(() => { messageContainer.innerHTML = ''; }, 3000);
+            }
+        }
+
+        function clearMessage() {
+            messageContainer.innerHTML = '';
+            if (messageTimeout) { clearTimeout(messageTimeout); messageTimeout = null; }
+        }
+
+        function setLoading(loading) {
+            registerBtn.disabled = loading;
+            if (loading) {
+                registerText.style.display = 'none';
+                registerSpinner.style.display = 'inline-block';
+            } else {
+                registerText.style.display = 'inline';
+                registerSpinner.style.display = 'none';
+            }
+        }
+
+        if (registerForm) {
+            registerForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                clearMessage();
+                const username = document.getElementById('username').value.trim();
+                const password = document.getElementById('password').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+                const captcha = document.getElementById('captchaInput').value.trim();
+
+                // 前端格式验证
+                const usernameRegex = /^[A-Za-z0-9_]{3,20}$/;
+                if (!usernameRegex.test(username)) {
+                    showMessage('用户名格式不正确');
+                    return;
+                }
+                const passwordRegex = /^(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9]{6,20}$/;
+                if (!passwordRegex.test(password)) {
+                    showMessage('密码需为 6-20 位且包含字母和数字');
+                    return;
+                }
+                if (password !== confirmPassword) {
+                    showMessage('两次密码不一致');
+                    return;
+                }
+
+                setLoading(true);
+                try {
+                    const response = await fetch('/auth/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password, confirmPassword, captcha })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        showMessage('注册成功，正在跳转到登录页...', 'success');
+                        setTimeout(() => {
+                            window.location.href = '/auth/login';
+                        }, 1200);
+                    } else {
+                        showMessage(data.message || '注册失败');
+                    }
+                } catch (err) {
+                    showMessage('网络错误，请稍后重试');
+                } finally {
+                    setLoading(false);
+                }
+            });
+
+            // 输入时清除错误
+            ['username','password','confirmPassword'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('input', clearMessage);
+            });
+
+            // 加载验证码
+            async function loadCaptcha() {
+                try {
+                    const res = await fetch('/auth/math-captcha');
+                    const data = await res.json();
+                    document.getElementById('captchaQuestion').textContent = data.question;
+                    document.getElementById('captchaGroup').style.display = 'block';
+                    document.getElementById('captchaInput').value = '';
+                } catch(err) {
+                    console.error('加载验证码失败', err);
+                }
+            }
+
+            loadCaptcha();
+            document.getElementById('reloadCaptcha').addEventListener('click', loadCaptcha);
+        }
+    </script>
+</body>
+</html> 

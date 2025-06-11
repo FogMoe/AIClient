@@ -384,6 +384,60 @@ async function updateUserCoins(userId, amount) {
     }
 }
 
+// ========================== 站内注册相关 ================================
+// 检查用户名是否已存在
+async function isUsernameTaken(username) {
+    const rows = await query('SELECT id FROM user WHERE name = ?', [username]);
+    return rows.length > 0;
+}
+
+// 为站内账号分配新的唯一ID（与Telegram UID段错开）
+async function generateWebUserId() {
+    // 预留的站内账号ID起始段，可通过环境变量覆盖
+    const OFFSET_STR = process.env.LOCAL_USER_ID_OFFSET || '8000000000000000';
+    const OFFSET = BigInt(OFFSET_STR);
+
+    // 获取当前段内的最大ID
+    const rows = await query('SELECT MAX(id) AS maxId FROM user WHERE id >= ?', [OFFSET_STR]);
+    if (rows.length === 0 || rows[0].maxId === null) {
+        return OFFSET.toString();
+    }
+    // 在 BigInt 范围内加1
+    const nextId = BigInt(rows[0].maxId) + 1n;
+    return nextId.toString();
+}
+
+// 创建站内用户 (provider = 'web')
+async function createWebUser(username, hashedPassword) {
+    // 事务，确保user 与 web_password 同时写入
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+
+        const newId = await generateWebUserId();
+
+        // 插入 user 表，站内账号默认赠送 10 枚金币
+        await conn.query(
+            'INSERT INTO user (id, name, provider, coins) VALUES (?, ?, \'web\', 10)',
+            [newId, username]
+        );
+
+        // 插入 web_password 表
+        await conn.query(
+            'INSERT INTO web_password (user_id, password) VALUES (?, ?)',
+            [newId, hashedPassword]
+        );
+
+        await conn.commit();
+        return newId;
+    } catch (err) {
+        await conn.rollback();
+        throw err;
+    } finally {
+        conn.release();
+    }
+}
+
 module.exports = {
     pool,
     query,
@@ -393,5 +447,7 @@ module.exports = {
     getChatHistory,
     saveChatHistory,
     deleteChatHistory,
-    updateUserCoins
+    updateUserCoins,
+    isUsernameTaken,
+    createWebUser
 };
