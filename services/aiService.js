@@ -2,6 +2,7 @@ const { AzureOpenAI } = require("openai");
 const OpenAI = require("openai");
 const config = require('../config');
 const { logger } = require('../utils/logger');
+const { webSearch } = require('./zhipuSearchService');
 
 // 安全清理函数（用于后端）
 function sanitizeForDisplay(text) {
@@ -30,6 +31,25 @@ function isGeminiConfigured() {
            config.geminiAI.apiKey !== "";
 }
 
+// 定义联网搜索工具
+const webSearchTool = {
+    type: "function",
+    function: {
+        name: "web_search",
+        description: "通过搜索引擎查询实时信息，获取最新的网络内容和数据",
+        parameters: {
+            type: "object",
+            properties: {
+                query: {
+                    type: "string",
+                    description: "要搜索的关键词或短语"
+                }
+            },
+            required: ["query"]
+        }
+    }
+};
+
 // 使用Gemini API处理聊天
 async function processWithGemini(messages) {
     try {
@@ -41,24 +61,75 @@ async function processWithGemini(messages) {
             baseURL: config.geminiAI.baseURL,
         });
 
+        // 第一次调用，包含工具定义
         const result = await client.chat.completions.create({
             model: config.geminiAI.model,
             messages: messages,
             max_tokens: config.geminiAI.maxTokens,
             temperature: config.geminiAI.temperature,
+            tools: [webSearchTool],
+            tool_choice: "auto"
         });
 
-        let aiResponse = result.choices[0].message.content;
-        logger.info('Gemini API响应成功');
+        const responseMessage = result.choices[0].message;
         
-        return aiResponse;
+        // 检查是否需要调用工具
+        if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+            logger.info('Gemini请求调用工具函数');
+            
+            // 将助手的响应添加到消息历史
+            const updatedMessages = [...messages, responseMessage];
+            
+            // 处理每个工具调用
+            for (const toolCall of responseMessage.tool_calls) {
+                if (toolCall.function.name === 'web_search') {
+                    try {
+                        const args = JSON.parse(toolCall.function.arguments);
+                        const searchResult = await webSearch(args.query);
+                        
+                        // 添加工具调用结果到消息历史
+                        updatedMessages.push({
+                            role: "tool",
+                            tool_call_id: toolCall.id,
+                            content: searchResult
+                        });
+                        
+                        logger.info(`联网搜索完成，查询: ${args.query}`);
+                    } catch (parseError) {
+                        logger.error(`解析工具调用参数失败: ${parseError.message}`);
+                        updatedMessages.push({
+                            role: "tool",
+                            tool_call_id: toolCall.id,
+                            content: "搜索参数解析失败"
+                        });
+                    }
+                }
+            }
+            
+            // 使用更新后的消息历史再次调用API获取最终响应
+            const finalResult = await client.chat.completions.create({
+                model: config.geminiAI.model,
+                messages: updatedMessages,
+                max_tokens: config.geminiAI.maxTokens,
+                temperature: config.geminiAI.temperature
+            });
+            
+            const aiResponse = finalResult.choices[0].message.content;
+            logger.info('Gemini API函数调用响应成功');
+            return aiResponse;
+        } else {
+            // 没有工具调用，直接返回响应
+            const aiResponse = responseMessage.content;
+            logger.info('Gemini API响应成功');
+            return aiResponse;
+        }
     } catch (error) {
         let errorMessage = `Gemini API 错误: ${error && error.message ? error.message : String(error)}\n`;
         errorMessage += `Gemini 错误详情: ${error && error.stack ? error.stack : JSON.stringify(error)}\n`;
         errorMessage += `Gemini 原始错误对象(JSON): ${JSON.stringify(error)}\n`;
         errorMessage += `Gemini 原始错误对象(String): ${String(error)}\n`;
         if (error.response) {
-            errorMessage += `Gemini 响应错误: ${JSON.stringify(error.response.data || error.response)}\n`;
+            errorMessage += `Gemini 响应错误: ${JSON.stringify(error.response.data || error.response)}`;
         }
         logger.error(errorMessage);
         throw error;

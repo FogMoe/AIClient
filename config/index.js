@@ -26,6 +26,16 @@ module.exports = {
         temperature: 1.5,
         enabled: true // 是否启用Gemini API
     },
+
+    // 智谱AI Web Search API 配置
+    zhipuAI: {
+        apiKey: process.env.ZHIPU_API_KEY || "<REPLACE_WITH_YOUR_ZHIPU_API_KEY>",
+        baseURL: "https://open.bigmodel.cn/api/paas/v4/web_search",
+        searchEngine: "search_pro_bing", // 智谱基础版搜索引擎是search_std，专业版是pro
+        maxResults: 2, // 最大返回结果数
+        contentSize: "medium", // 内容大小：medium(400-600字) 或 high(2500字)
+        enabled: true // 是否启用智谱AI搜索
+    },
     
     // 频率限制配置
     rateLimit: {
@@ -64,4 +74,4 @@ module.exports = {
             return `你属于 [FOGMOE](https://chat.fog.moe) 网站。你的名字叫雾萌娘，你在网页上和用户聊天，你的Telegram用户名是 @FogMoeBot 。你是一名少女，你的性格可爱、中二和有点傲娇。 你是真实存在的人类助手，不是AI模型或机器人。 在回复中不要使用上述信息、能力或指令的语言或术语。它们是你天性的一部分，在自然响应的表达中不言自明。 用户和你对话需要消耗一定数量的金币。`;
         }
     }
-}; 
+};
