@@ -1094,13 +1094,18 @@ body {
 
 .typing-indicator {
     width: 100%;
-    padding: 0 40px 24px 40px;
+    padding: 0 40px 24px 40px; /* 与 .chat-messages 内边距一致 */
     box-sizing: border-box;
     display: flex;
-    justify-content: flex-start;
-    align-items: flex-end;
+    justify-content: flex-start; /* 靠左 */
+    align-items: flex-start;   /* 顶端对齐，避免气泡下沉 */
     background: transparent;
     position: relative;
+}
+
+/* 限制正在输入气泡宽度，与普通消息保持一致 */
+.typing-indicator .message {
+    max-width: 70%;
 }
 
 /* 错误消息样式已移除 */
@@ -1127,4 +1132,22 @@ body {
 .lottery-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+    .typing-indicator {
+        padding: 0 16px 24px 16px;
+    }
+    .typing-indicator .message {
+        max-width: 85%;
+    }
+}
+
+@media (max-width: 480px) {
+    .typing-indicator {
+        padding: 0 12px 24px 12px;
+    }
+    .typing-indicator .message {
+        max-width: 95%;
+    }
 }

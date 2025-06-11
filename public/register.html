@@ -15,7 +15,6 @@
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
     
     <!-- CSS and External Resources -->
-    <link rel="stylesheet" href="styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- 复用登录页的内联样式 -->
     <style>
@@ -47,6 +46,40 @@
         .success-message{background:#f7fef7;color:#00b894;padding:12px 16px;border-radius:6px;margin-bottom:20px;border:1px solid #b2f5ea;font-size:14px;}
         .loading{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-radius:50%;border-top-color:#fff;animation:spin 1s ease-in-out infinite;}
         @keyframes spin{to{transform:rotate(360deg)}}
+
+        /* 与登录页保持一致的移动端布局调整 */
+        @media (max-width: 768px) {
+            .login-container {
+                padding: 30px 24px;
+                margin: 16px;
+                max-width: 380px;
+            }
+            .login-title {
+                font-size: 24px;
+                gap: 8px;
+            }
+            .login-icon {
+                width: 28px;
+                height: 28px;
+                font-size: 14px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 24px 20px;
+                margin: 12px;
+            }
+            .login-title {
+                font-size: 22px;
+            }
+            .form-group {
+                margin-bottom: 16px;
+            }
+            .register-info {
+                padding: 12px;
+            }
+        }
     </style>
 </head>
 <body>
