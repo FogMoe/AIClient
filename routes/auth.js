@@ -10,6 +10,9 @@ const config = require('../config');
 // 登录失败计数器（内存存储，生产环境建议使用Redis）
 const loginAttempts = new Map();
 
+// 注册尝试计数器（内存存储，生产建议Redis）
+const registerAttempts = new Map();
+
 // 清理过期的登录尝试记录
 function cleanupLoginAttempts() {
     const now = Date.now();
@@ -24,6 +27,19 @@ function cleanupLoginAttempts() {
 
 // 每小时清理一次过期记录
 setInterval(cleanupLoginAttempts, 60 * 60 * 1000);
+
+// 清理注册尝试
+function cleanupRegisterAttempts() {
+    const now = Date.now();
+    const oneHour = 60 * 60 * 1000;
+    for (const [ip, data] of registerAttempts.entries()) {
+        if (now - data.firstAttempt > oneHour) {
+            registerAttempts.delete(ip);
+        }
+    }
+}
+
+setInterval(cleanupRegisterAttempts, 60 * 60 * 1000);
 
 // SHA256加密函数
 function hashPassword(password) {
@@ -64,6 +80,15 @@ router.get('/register', (req, res) => {
 router.post('/register', async (req, res) => {
     try {
         const { username, password, confirmPassword, captcha } = req.body;
+        const clientIP = req.ip || req.connection.remoteAddress;
+
+        // 注册频率限制：每 IP 每小时最多 3 次
+        const regData = registerAttempts.get(clientIP) || { count: 0, firstAttempt: Date.now() };
+        const oneHour = 60 * 60 * 1000;
+        if (regData.count >= 3 && (Date.now() - regData.firstAttempt) < oneHour) {
+            const remaining = Math.ceil((oneHour - (Date.now() - regData.firstAttempt)) / 60000);
+            return res.status(429).json({ success: false, message: `注册次数过多，请 ${remaining} 分钟后再试` });
+        }
 
         // 输入非空检查
         if (!username || !password || !confirmPassword) {
@@ -107,6 +132,14 @@ router.post('/register', async (req, res) => {
 
         // 创建用户
         const newUserId = await createWebUser(username, hashedPassword);
+
+        // 记录注册尝试（成功后）
+        if (registerAttempts.has(clientIP)) {
+            regData.count += 1;
+            registerAttempts.set(clientIP, regData);
+        } else {
+            registerAttempts.set(clientIP, { count: 1, firstAttempt: Date.now() });
+        }
 
         return res.json({ success: true, message: '注册成功，请登录', userId: newUserId });
     } catch (error) {
@@ -230,7 +263,7 @@ router.post('/login', async (req, res) => {
             logger.warn(`登录失败: 用户ID ${userId} from IP: ${clientIP} (尝试次数: ${currentAttempts.count})`);
             res.status(401).json({
                 success: false,
-                message: '用户ID或密码错误，如果您还没有注册，请先前往注册账号'
+                message: '用户名或密码错误，如果您还没有注册，请先前往注册账号'
             });
         }
     } catch (error) {
