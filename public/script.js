@@ -400,6 +400,9 @@ function initializeBaseEventListeners() {
                         scrollToBottom();
                     }
                     
+                    // 更新页面滚动状态
+                    updatePageScroll();
+                    
                     return;
                 }
             }
@@ -427,6 +430,13 @@ function initializeBaseEventListeners() {
             backupChatHistoryToLocalStorage();
         }
     });
+
+    // 监听视口尺寸变化以动态调整页面滚动（只绑定一次）
+    window.addEventListener('resize', updatePageScroll);
+    window.addEventListener('orientationchange', updatePageScroll);
+
+    // 初始化时执行一次
+    updatePageScroll();
 }
 
 // 初始化聊天相关事件监听器（在登录成功后绑定）
@@ -683,9 +693,13 @@ function handleInput(e) {
     isUserTyping = true;
     
     // 调整输入框高度（如果是textarea）
-    if (e.target.tagName === 'TEXTAREA') {
-        e.target.style.height = 'auto';
-        e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; // 限制最大高度为200px
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; // 限制最大高度为200px
+    // 根据内容是否溢出动态显示滚动条，避免只有一行时出现滚动条
+    if (e.target.scrollHeight > e.target.clientHeight + 2) {
+        e.target.style.overflowY = 'auto';
+    } else {
+        e.target.style.overflowY = 'hidden';
     }
     
     // 设置发送按钮状态
@@ -785,6 +799,9 @@ function addMessage(text, type, timestamp = null, messageClass = '') {
     if (isNearBottom) {
         scrollToBottom();
     }
+
+    // 更新页面滚动状态
+    updatePageScroll();
 }
 
 // 格式化时间
@@ -805,6 +822,21 @@ function formatTime(timestamp) {
 // 滚动到底部
 function scrollToBottom() {
     chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// 根据内容高度动态切换页面滚动
+function updatePageScroll() {
+    const docEl = document.documentElement;
+    const bodyEl = document.body;
+    // 当页面整体高度超过视口，则允许滚动，否则锁定
+    const shouldScroll = bodyEl.scrollHeight > window.innerHeight + 2;
+    const overflowValue = shouldScroll ? 'auto' : 'hidden';
+    if (bodyEl.style.overflowY !== overflowValue) {
+        bodyEl.style.overflowY = overflowValue;
+    }
+    if (docEl.style.overflowY !== overflowValue) {
+        docEl.style.overflowY = overflowValue;
+    }
 }
 
 // 显示打字指示器
@@ -1486,6 +1518,9 @@ function displayChatHistory(preserveScrollPosition = false) {
         // 计算新的滚动位置：保持相对位置不变
         chatMessages.scrollTop = beforeScrollTop + (afterScrollHeight - beforeScrollHeight);
     }
+
+    // 更新页面滚动状态
+    updatePageScroll();
 }
 
 // 仅显示消息，不添加到chatHistory数组
