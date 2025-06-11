@@ -1067,3 +1067,27 @@ body {
 }
 
 /* 错误消息样式已移除 */
+
+.lottery-btn {
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #ff9800;
+    transition: all 0.2s ease;
+    margin-left: 4px;
+}
+
+.lottery-btn:hover {
+    background: #e1e1e1;
+}
+
+.lottery-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}

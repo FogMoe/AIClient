@@ -118,7 +118,7 @@ router.post('/', rateLimitMiddleware, async (req, res) => {
                 // 金币不足，直接返回提示消息
                 logger.warn(`用户 ${userId} 金币不足，需要 ${coinCost} 枚，当前余额 ${userInfo ? userInfo.coins : 0}`);
                 return res.json({
-                    response: "您的金币余额不足，无法继续对话。请前往[Telegram机器人](https://t.me/FogMoeBot)获取更多金币。",
+                    response: "您的金币余额不足，无法继续对话。请点击抽奖按钮或前往[Telegram机器人](https://t.me/FogMoeBot)获取更多金币。",
                     coinShortage: true,
                     timestamp: new Date().toISOString()
                 });

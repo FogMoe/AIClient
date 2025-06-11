@@ -230,7 +230,7 @@ router.post('/login', async (req, res) => {
             logger.warn(`登录失败: 用户ID ${userId} from IP: ${clientIP} (尝试次数: ${currentAttempts.count})`);
             res.status(401).json({
                 success: false,
-                message: '用户ID或密码错误，如果您还没有注册，请先前往Telegram机器人注册账号'
+                message: '用户ID或密码错误，如果您还没有注册，请先前往注册账号'
             });
         }
     } catch (error) {

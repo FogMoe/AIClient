@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const chatRoutes = require('./chat');
 const chatHistoryRoutes = require('./chatHistory');
+const lotteryRoutes = require('./lottery');
 const { router: authRoutes, requireAuth } = require('./auth');
 const config = require('../config');
 
@@ -23,6 +24,9 @@ router.use('/api/chat', requireAuth, chatRoutes);
 
 // 聊天历史API路由（需要登录）
 router.use('/api/chat-history', requireAuth, chatHistoryRoutes);
+
+// 抽奖路由
+router.use('/api/lottery', requireAuth, lotteryRoutes);
 
 // Turnstile配置API
 router.get('/api/turnstile-config', (req, res) => {

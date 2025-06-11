@@ -438,6 +438,30 @@ async function createWebUser(username, hashedPassword) {
     }
 }
 
+// ========================== 抽奖相关 ================================
+async function getLastLotteryDraw(userId) {
+    // 返回UTC时间戳（秒）
+    const rows = await query('SELECT UNIX_TIMESTAMP(last_lottery_date) AS ts FROM user_lottery WHERE user_id = ?', [userId]);
+    return rows.length ? rows[0].ts : null; // 秒级
+}
+
+async function canDrawLottery(userId) {
+    const lastTs = await getLastLotteryDraw(userId); // 秒
+    const intervalSec = 24 * 60 * 60; // 24h
+    if (!lastTs) return { canDraw: true, remaining: 0 };
+    const nowSec = Math.floor(Date.now() / 1000);
+    const diff = nowSec - lastTs;
+    if (diff >= intervalSec) return { canDraw: true, remaining: 0 };
+    return { canDraw: false, remaining: (intervalSec - diff) * 1000 };
+}
+
+async function recordLotteryDraw(userId) {
+    await query(
+        'INSERT INTO user_lottery (user_id, last_lottery_date) VALUES (?, UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE last_lottery_date = UTC_TIMESTAMP()',
+        [userId]
+    );
+}
+
 module.exports = {
     pool,
     query,
@@ -449,5 +473,7 @@ module.exports = {
     deleteChatHistory,
     updateUserCoins,
     isUsernameTaken,
-    createWebUser
+    createWebUser,
+    canDrawLottery,
+    recordLotteryDraw
 };

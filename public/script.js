@@ -201,6 +201,7 @@ const userInfo = document.getElementById('userInfo');
 const userName = document.getElementById('userName');
 const userCoins = document.getElementById('userCoins');
 const logoutBtn = document.getElementById('logoutBtn');
+const lotteryBtn = document.getElementById('lotteryBtn');
 
 // 界面状态管理元素
 const loadingScreen = document.getElementById('loadingScreen');
@@ -444,6 +445,26 @@ function initializeChatEventListeners() {
     }
     if (logoutBtn) {
         logoutBtn.addEventListener('click', handleLogout);
+    }
+    if (lotteryBtn) {
+        lotteryBtn.addEventListener('click', async () => {
+            if (lotteryBtn.disabled) return;
+            lotteryBtn.disabled = true;
+            try {
+                const res = await fetch('/api/lottery/draw', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    if (userCoins) userCoins.textContent = data.updatedCoins;
+                    showErrorModal(`恭喜！你获得了 ${data.coins} 枚金币`);
+                } else {
+                    showErrorModal(data.message || '抽奖失败');
+                }
+            } catch (err) {
+                showErrorModal('网络错误，抽奖失败');
+            } finally {
+                await refreshLotteryStatus();
+            }
+        });
     }
 }
 
@@ -1114,6 +1135,9 @@ function displayUserInfo(user) {
         userCoins.textContent = user.coins || 0;
         userInfo.style.display = 'flex';
     }
+
+    // 更新抽奖按钮状态
+    refreshLotteryStatus();
 }
 
 // 初始化聊天应用
@@ -1537,3 +1561,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // 其他聊天相关初始化会在登录验证成功后进行
     loadUserInfo();
 });
+
+// ================= 抽奖相关 =================
+async function refreshLotteryStatus() {
+    if (!lotteryBtn) return;
+    try {
+        const res = await fetch('/api/lottery/status');
+        const data = await res.json();
+        lotteryBtn.disabled = !data.canDraw;
+        if (!data.canDraw) {
+            const hrs = Math.ceil(data.remaining / 3600000);
+            lotteryBtn.title = `已抽奖，剩余约 ${hrs} 小时`;
+        } else {
+            lotteryBtn.title = '抽奖赢取金币';
+        }
+    } catch (err) {
+        lotteryBtn.disabled = true;
+    }
+}
