@@ -5,10 +5,17 @@
     box-sizing: border-box;
 }
 
+/* 使用新的视口单位 100dvh 解决移动端 Chrome 地址栏收缩导致的 100vh 溢出问题 */
+html, body {
+    height: 100dvh;           /* 首选动态视口高度，支持的新浏览器会采用 */
+    height: 100vh;            /* 回退旧浏览器 */
+    overflow: hidden;         /* 禁止页面整体滚动 */
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background: #f5f5f5;
-    min-height: 100vh;
+    min-height: 100dvh;
     color: #333;
 }
 
@@ -82,9 +89,10 @@ body {
     }
 }
 
+/* 更新容器高度同样使用 100dvh，确保始终占满可视区域 */
 .app-container {
     display: flex;
-    height: 100vh;
+    height: 100dvh;
     max-width: 1400px;
     margin: 0 auto;
     background: white;
