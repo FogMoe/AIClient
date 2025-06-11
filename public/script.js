@@ -828,13 +828,34 @@ function scrollToBottom() {
 function updatePageScroll() {
     const docEl = document.documentElement;
     const bodyEl = document.body;
-    // 当页面整体高度超过视口，则允许滚动，否则锁定
-    const shouldScroll = bodyEl.scrollHeight > window.innerHeight + 2;
-    const overflowValue = shouldScroll ? 'auto' : 'hidden';
-    if (bodyEl.style.overflowY !== overflowValue) {
+
+    const contentHeight = bodyEl.scrollHeight;
+    const viewportHeight = window.innerHeight || docEl.clientHeight;
+
+    // 简易手机端判定（UA 或视口宽度）
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth <= 768;
+
+    if (isMobile && contentHeight > viewportHeight + 2) {
+        // 需要缩放：计算缩放比例（下限 0.8，避免过小）
+        const rawScale = viewportHeight / contentHeight;
+        const scale = Math.max(0.8, Math.min(1, rawScale));
+
+        // 应用缩放，隐藏滚动
+        bodyEl.style.transformOrigin = 'top left';
+        bodyEl.style.transform = `scale(${scale})`;
+        bodyEl.style.width = `${100 / scale}%`; // 保持宽度填满
+        bodyEl.style.overflowY = 'hidden';
+        docEl.style.overflowY = 'hidden';
+    } else {
+        // 还原缩放
+        bodyEl.style.transform = '';
+        bodyEl.style.transformOrigin = '';
+        bodyEl.style.width = '';
+
+        // 决定是否需要滚动
+        const shouldScroll = contentHeight > viewportHeight + 2;
+        const overflowValue = shouldScroll ? 'auto' : 'hidden';
         bodyEl.style.overflowY = overflowValue;
-    }
-    if (docEl.style.overflowY !== overflowValue) {
         docEl.style.overflowY = overflowValue;
     }
 }
