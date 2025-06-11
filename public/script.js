@@ -218,6 +218,9 @@ let chatHistoryCache = new Map(); // 缓存聊天历史
 let lastCacheTime = 0; // 上次缓存时间
 const CACHE_DURATION = 60000; // 缓存60秒
 
+// ------------------ 首次加载超时处理 ------------------
+let initTimeoutId = null;
+
 // 会话唯一ID
 let sessionId = localStorage.getItem('sessionId');
 if (!sessionId) {
@@ -1064,7 +1067,10 @@ function exportChatHistory() {
 
 // 网络状态监听
 window.addEventListener('online', () => {
-    // 静默处理网络恢复连接
+    // 如果仍在加载界面，重新尝试加载
+    if (loadingScreen && loadingScreen.style.display !== 'none') {
+        loadUserInfo();
+    }
 });
 
 window.addEventListener('offline', () => {
@@ -1074,6 +1080,10 @@ window.addEventListener('offline', () => {
 
 // 显示应用界面
 function showApp() {
+    if (initTimeoutId) {
+        clearTimeout(initTimeoutId);
+        initTimeoutId = null;
+    }
     if (loadingScreen) {
         loadingScreen.style.display = 'none';
     }
@@ -1087,6 +1097,10 @@ function showApp() {
 
 // 平滑跳转到登录页面
 function smoothRedirectToLogin() {
+    if (initTimeoutId) {
+        clearTimeout(initTimeoutId);
+        initTimeoutId = null;
+    }
     if (loadingScreen) {
         const loadingText = loadingScreen.querySelector('.loading-text');
         if (loadingText) {
@@ -1550,6 +1564,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // 然后检查用户登录状态
     // 其他聊天相关初始化会在登录验证成功后进行
     loadUserInfo();
+
+    // 如果 12 秒内仍停留在加载界面，提示用户刷新
+    initTimeoutId = setTimeout(() => {
+        if (loadingScreen && loadingScreen.style.display !== 'none') {
+            const txt = loadingScreen.querySelector('.loading-text');
+            if (txt) txt.textContent = '网络较慢，点击刷新或稍后重试';
+            const content = loadingScreen.querySelector('.loading-content');
+            if (content && !content.querySelector('.reload-btn')) {
+                const btn = document.createElement('button');
+                btn.textContent = '刷新';
+                btn.className = 'btn reload-btn';
+                btn.style.marginTop = '16px';
+                btn.addEventListener('click', () => location.reload());
+                content.appendChild(btn);
+            }
+        }
+    }, 12000);
 });
 
 // ================= 抽奖相关 =================
