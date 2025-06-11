@@ -15,6 +15,7 @@
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
     
     <!-- CSS and External Resources -->
+    <link rel="stylesheet" href="styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- 复用登录页的内联样式 -->
     <style>
@@ -154,7 +155,7 @@
 
                 setLoading(true);
                 try {
-                    const response = await fetch('/auth/register', {
+                    const response = await fetchWithTimeout('/auth/register', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ username, password, confirmPassword, captcha })
@@ -181,21 +182,58 @@
                 if (el) el.addEventListener('input', clearMessage);
             });
 
-            // 加载验证码
+            // ------------------ 加载验证码 ------------------
             async function loadCaptcha() {
+                const group = document.getElementById('captchaGroup');
+                const questionEl = document.getElementById('captchaQuestion');
+                const inputEl = document.getElementById('captchaInput');
+
+                // 先展示区域并放一个占位文字
+                group.style.display = 'block';
+                questionEl.textContent = '加载中…';
+                questionEl.style.color = '#888';
+
                 try {
-                    const res = await fetch('/auth/math-captcha');
+                    // 这里把超时调到 12000 ms，只针对这一类请求生效
+                    const res = await fetchWithTimeout('/auth/math-captcha', {}, 12000);
                     const data = await res.json();
-                    document.getElementById('captchaQuestion').textContent = data.question;
-                    document.getElementById('captchaGroup').style.display = 'block';
-                    document.getElementById('captchaInput').value = '';
-                } catch(err) {
+
+                    // 写入真正的题目
+                    questionEl.textContent = data.question;
+                    questionEl.style.color = '#333';
+                    inputEl.value = '';
+                } catch (err) {
                     console.error('加载验证码失败', err);
+                    questionEl.textContent = '加载失败，请点"换一题"重试';
+                    questionEl.style.color = '#d63031';
                 }
             }
 
-            loadCaptcha();
+            // 页面加载完就执行一次
+            // 点击"换一题"再调用
             document.getElementById('reloadCaptcha').addEventListener('click', loadCaptcha);
+
+            // ------------------ 带超时 fetch 与页面可见性处理 ------------------
+            const activeCtrls = new Set();
+            function fetchWithTimeout(url, options = {}, timeout = 8000) {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), timeout);
+                activeCtrls.add(ctrl);
+                const opts = { ...options, signal: ctrl.signal, credentials: options.credentials || 'same-origin' };
+                return fetch(url, opts).finally(() => {
+                    clearTimeout(timer);
+                    activeCtrls.delete(ctrl);
+                });
+            }
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    activeCtrls.forEach(c => c.abort());
+                }
+            });
+
+            // 页面加载完再调用一次，确保 fetchWithTimeout 已经定义
+            loadCaptcha();
         }
     </script>
 </body>

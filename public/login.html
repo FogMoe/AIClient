@@ -154,6 +154,14 @@
             margin-bottom: 10px;
         }
 
+        .register-links {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
         .register-link {
             display: inline-flex;
             align-items: center;
@@ -166,6 +174,8 @@
             background: rgba(0, 120, 212, 0.1);
             border-radius: 6px;
             transition: all 0.2s ease;
+            margin: 0 4px;
+            white-space: nowrap;
         }
 
         .register-link:hover {
@@ -305,8 +315,10 @@
 
         <div class="register-info">
             <p class="register-text">还没有账号？</p>
-            <a href="/auth/register" class="register-link">注册新账号</a>
-            <a href="https://t.me/FogMoeBot" target="_blank" class="register-link">前往Telegram机器人注册</a>
+            <div class="register-links">
+                <a href="/auth/register" class="register-link">注册新账号</a>
+                <a href="https://t.me/FogMoeBot" target="_blank" class="register-link">前往Telegram机器人注册</a>
+            </div>
         </div>
     </div>
 
@@ -417,7 +429,7 @@
         // 获取Turnstile配置
         async function getTurnstileConfig() {
             try {
-                const response = await fetch('/api/turnstile-config');
+                const response = await fetchWithTimeout('/api/turnstile-config');
                 const data = await response.json();
                 turnstileEnabled = data.enabled;
                 turnstileSiteKey = data.siteKey;
@@ -575,13 +587,36 @@
             
             // 检查是否已登录
             try {
-                const response = await fetch('/auth/status');
+                const response = await fetchWithTimeout('/auth/status');
                 const data = await response.json();
                 if (data.loggedIn) {
                     window.location.href = '/';
                 }
             } catch (error) {
                 // 静默处理错误
+            }
+        });
+
+        // ------------------ 网络工具：带超时 fetch ------------------
+        const activeControllers = new Set();
+        function fetchWithTimeout(url, options = {}, timeout = 8000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeout);
+            activeControllers.add(controller);
+            const opts = { ...options, signal: controller.signal, credentials: options.credentials || 'same-origin' };
+            return fetch(url, opts).finally(() => {
+                clearTimeout(timer);
+                activeControllers.delete(controller);
+            });
+        }
+
+        // 页面进入后台时中止挂起请求，回到前台重新拉取配置
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                activeControllers.forEach(c => c.abort());
+            } else {
+                /* 重新拉取配置，避免后台挂起后前台一直 loading */
+                getTurnstileConfig();
             }
         });
     </script>

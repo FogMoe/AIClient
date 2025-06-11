@@ -76,49 +76,50 @@ if (typeof marked !== 'undefined') {
 // 复制消息功能
 async function copyMessage(text, button) {
     try {
-        // 使用现代的 Clipboard API
         if (navigator.clipboard && window.isSecureContext) {
             await navigator.clipboard.writeText(text);
         } else {
-            // 降级方案：使用传统的复制方法
+            /* ---------- 兼容旧版 iOS / Chrome 内核 ---------- */
             const textArea = document.createElement('textarea');
             textArea.value = text;
             textArea.style.position = 'fixed';
-            textArea.style.left = '-999999px';
-            textArea.style.top = '-999999px';
+            textArea.style.opacity = '0';
+            textArea.setAttribute('readonly', '');
             document.body.appendChild(textArea);
-            textArea.focus();
+            // 选中内容
             textArea.select();
-            document.execCommand('copy');
+            textArea.selectionStart = 0;
+            textArea.selectionEnd = text.length;
+            // 尝试复制
+            const successful = document.execCommand('copy');
             document.body.removeChild(textArea);
+            if (!successful) throw new Error('execCommand failed');
         }
-        
-        // 显示复制成功的反馈
+
+        // 成功反馈
         const originalIcon = button.innerHTML;
         const originalTitle = button.title;
-        
         button.innerHTML = '<i class="fas fa-check"></i>';
         button.title = '已复制';
         button.classList.add('copied');
-        
-        // 2秒后恢复原始状态
         setTimeout(() => {
             button.innerHTML = originalIcon;
             button.title = originalTitle;
             button.classList.remove('copied');
         }, 2000);
-        
     } catch (error) {
-        // 静默处理复制失败
-        
-        // 显示复制失败的反馈
+        /* ---------- 如果依旧失败，最后兜底：弹出prompt让用户手动复制 ---------- */
+        const fallbackPrompted = window.prompt('复制失败，请手动复制内容：', text);
+        if (fallbackPrompted !== null) {
+            // 用户手动复制，无需进一步操作
+            return;
+        }
+        // 如果用户取消 prompt，则仍给出错误视觉提示
         const originalIcon = button.innerHTML;
         const originalTitle = button.title;
-        
         button.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
         button.title = '复制失败';
         button.classList.add('copy-error');
-        
         setTimeout(() => {
             button.innerHTML = originalIcon;
             button.title = originalTitle;
@@ -746,6 +747,7 @@ function addMessage(text, type, timestamp = null, messageClass = '') {
     // 为AI回复添加复制按钮在时间下方
     if (type === 'assistant') {
         const copyBtn = document.createElement('button');
+        copyBtn.type = 'button'; // 避免在某些浏览器中被当作提交按钮
         copyBtn.className = 'copy-btn';
         copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
         copyBtn.title = '复制消息';
@@ -1507,6 +1509,7 @@ function displayMessage(text, type, timestamp = null) {
     // 为AI回复添加复制按钮在时间下方
     if (type === 'assistant') {
         const copyBtn = document.createElement('button');
+        copyBtn.type = 'button'; // 避免在某些浏览器中被当作提交按钮
         copyBtn.className = 'copy-btn';
         copyBtn.innerHTML = '<i class="fas fa-copy"></i>';
         copyBtn.title = '复制消息';
