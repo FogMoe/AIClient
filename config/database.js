@@ -26,8 +26,9 @@ const dbConfig = {
     connectionLimit: 20,         // 从10增加到20
     queueLimit: 0,
     connectTimeout: 15000,       // 添加连接超时时间：15秒
-    acquireTimeout: 15000,       // 添加获取连接超时时间：15秒
-    timeout: 20000               // 添加查询超时时间：20秒
+    // 注意：mysql2 的 Connection 对象不识别 acquireTimeout/timeout 参数，
+    // 否则会出现 "Ignoring invalid configuration option passed to Connection" 报警。
+    // 如需控制获取连接或单条查询的超时，请分别在 createPool 级别或 execute 调用时传入。
 };
 
 // 创建连接池
