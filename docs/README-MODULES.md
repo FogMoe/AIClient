@@ -56,6 +56,7 @@ AIClient/
   - 模拟响应生成
   - 对话历史管理
   - 错误处理和回退机制
+  - Gemini 调用与智谱 Web Search 增强
 
 ### 📁 utils/
 **工具模块**

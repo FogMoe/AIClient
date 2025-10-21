@@ -62,6 +62,11 @@ npm run start
 - 频率限制、日志级别等均可在 `config/index.js` 中调整；
 - 若未配置 Turnstile 或第三方模型，可保持 env 中的默认占位符，应用会自动降级；
 - Telegram 机器人（`@FogMoeBot`）需单独部署，但可与本项目共享同一数据库/后端，以保持金币与账号同步；
+- 模型配置速览：
+  - `config/index.js` 管理 Azure OpenAI 的部署名称、API 版本与默认生成参数；
+  - Gemini 请求由 `services/aiService.js` 通过兼容 OpenAI 的 Gemini 端点发起；
+  - 启用智谱 Web Search 时，会调用 `services/zhipuSearchService.js` 提供搜索增强；
+  - 可在 `config/index.js` 中调整温度、最大 Token 等生成设置，并按需启用/禁用不同模型；
 - 更多文档：
   - [数据库初始化](DATABASE.md)
   - [模块结构说明](README-MODULES.md)

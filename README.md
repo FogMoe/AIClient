@@ -64,6 +64,11 @@ The app relies on MySQL to persist users, chat records, and coin balances. Creat
 - Adjust rate limits, logging levels, and provider toggles in `config/index.js`.
 - Placeholders in `.env` allow features like Turnstile or third-party models to degrade gracefully when not configured.
 - The companion Telegram bot (`@FogMoeBot`) should be hosted separately but can share the same database/backend so coins and accounts stay in sync.
+- Model configuration quick view:
+  - `config/index.js` holds the Azure OpenAI deployment name, API version, and default generation settings.
+  - Gemini requests go through `services/aiService.js`, calling the OpenAI-compatible Gemini endpoint.
+  - Zhipu Web Search (`services/zhipuSearchService.js`) augments responses when enabled.
+  - Toggle providers or adjust temperature/max tokens in `config/index.js`.
 - Additional documentation:
   - [Chinese Guide](docs/README.zh.md)
   - [Database Setup](docs/DATABASE.md)
