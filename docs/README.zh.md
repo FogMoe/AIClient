@@ -61,7 +61,12 @@ npm run start
 - `npm run start`：使用 Node.js 直接启动服务；
 - 频率限制、日志级别等均可在 `config/index.js` 中调整；
 - 若未配置 Turnstile 或第三方模型，可保持 env 中的默认占位符，应用会自动降级；
-- 文档目录包含 Turnstile 集成说明与模块结构参考。
+- Telegram 机器人（`@FogMoeBot`）需单独部署，但可与本项目共享同一数据库/后端，以保持金币与账号同步；
+- 更多文档：
+  - [数据库初始化](DATABASE.md)
+  - [模块结构说明](README-MODULES.md)
+  - [Cloudflare Turnstile 集成指南](TURNSTILE.md)
+  - [Telegram 提示说明](TELEGRAM.md)
 
 ## 许可证
 本项目基于 **GNU Affero General Public License v3.0**（或更新版本）发布。详细条款参见仓库中的 `LICENSE` 文件。任何经网络提供给用户的修改版本，都必须向同一用户群体开放源代码。

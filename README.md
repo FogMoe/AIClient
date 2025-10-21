@@ -63,7 +63,13 @@ The app relies on MySQL to persist users, chat records, and coin balances. Creat
 - `npm run start`: Launches the service with Node.js.
 - Adjust rate limits, logging levels, and provider toggles in `config/index.js`.
 - Placeholders in `.env` allow features like Turnstile or third-party models to degrade gracefully when not configured.
-- Additional guides for Turnstile integration and module breakdown live under `docs/`.
+- The companion Telegram bot (`@FogMoeBot`) should be hosted separately but can share the same database/backend so coins and accounts stay in sync.
+- Additional documentation:
+  - [Chinese Guide](docs/README.zh.md)
+  - [Database Setup](docs/DATABASE.md)
+  - [Module Overview](docs/README-MODULES.md)
+  - [Cloudflare Turnstile Integration](docs/TURNSTILE.md)
+  - [Telegram Integration Notes](docs/TELEGRAM.md)
 
 ## License
 This project is released under the **GNU Affero General Public License v3.0** (or any later version). See the `LICENSE` file for details. If you provide a modified version of this software over a network, you must offer the corresponding source code to those users in compliance with AGPL requirements.
