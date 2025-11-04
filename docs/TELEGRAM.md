@@ -27,4 +27,4 @@ If you need actual Telegram bot functionality, host the bot as a companion servi
 
 ---
 
-*¹ 参考项目地址：https://github.com/FogMoe/Multi-Functional-Telegram-Bot （目前未开源）。可在 http://t.me/FogMoeBot 体验成品机器人。*
+*¹ 参考项目地址：https://github.com/FogMoe/telegram-bot 可在 http://t.me/FogMoeBot 体验成品机器人。*
